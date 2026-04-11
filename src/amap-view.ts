@@ -123,8 +123,8 @@ export class AMapView extends BasesView {
 				securityJsCode: this.plugin.settings.securityJsCode,
 			});
 
-			// Convert center from WGS-84 to GCJ-02
-			const centerGcj02 = this.wgs84ToGcj02(this.mapConfig.center);
+			// Use GCJ-02 coordinates directly (AMap format: [lng, lat])
+			const centerGcj02 = this.mapConfig.center;
 
 			// Determine initial position: prefer ephemeral state if available, otherwise use config
 			let initialCenter: [number, number] = centerGcj02;
@@ -132,7 +132,7 @@ export class AMapView extends BasesView {
 
 			if (this.pendingMapState) {
 				if (this.pendingMapState.center) {
-					initialCenter = this.wgs84ToGcj02(this.pendingMapState.center);
+					initialCenter = this.pendingMapState.center;
 				}
 				if (this.pendingMapState.zoom !== undefined && this.pendingMapState.zoom !== null) {
 					initialZoom = this.pendingMapState.zoom;
@@ -166,6 +166,13 @@ export class AMapView extends BasesView {
 				position: 'LB',
 			}));
 
+			// Add build info label
+			const buildLabel = document.createElement('div');
+			buildLabel.className = 'amaps-build-label';
+			buildLabel.textContent = 'AMaps v1.0.0 (Build: 20250411-001)';
+			buildLabel.style.cssText = 'position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.5); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; z-index: 1000; pointer-events: none;';
+			this.mapEl.appendChild(buildLabel);
+
 			// Add context menu to map
 			this.map.on('rightclick', (e: any) => {
 				this.showMapContextMenu(e);
@@ -185,7 +192,8 @@ export class AMapView extends BasesView {
 
 				if (!this.pendingMapState) {
 					if (hasConfiguredCenter) {
-						this.map.setCenter(this.wgs84ToGcj02(this.mapConfig.center));
+						// Use GCJ-02 coordinates directly
+						this.map.setCenter(this.mapConfig.center);
 					} else {
 						const bounds = this.markerManager.getBounds();
 						if (bounds) {
@@ -293,7 +301,8 @@ export class AMapView extends BasesView {
 				if (this.pendingMapState && this.map) {
 					const { center, zoom } = this.pendingMapState;
 					if (center) {
-						this.map.setCenter(this.wgs84ToGcj02(center));
+						// Use GCJ-02 coordinates directly
+						this.map.setCenter(center);
 					}
 					if (zoom !== null && zoom !== undefined) {
 						this.map.setZoom(zoom);
@@ -323,9 +332,8 @@ export class AMapView extends BasesView {
 
 		const hasConfiguredCenter = this.mapConfig.center[0] !== 0 || this.mapConfig.center[1] !== 0;
 		if (hasConfiguredCenter) {
-			// Convert WGS-84 to GCJ-02 for AMap
-			const gcj02Center = this.wgs84ToGcj02(this.mapConfig.center);
-			this.map.setCenter(gcj02Center);
+			// Use GCJ-02 coordinates directly
+			this.map.setCenter(this.mapConfig.center);
 		}
 	}
 
@@ -480,10 +488,9 @@ export class AMapView extends BasesView {
 		const clickLngLat = e.lnglat;
 		if (!clickLngLat) return;
 
-		// Convert from GCJ-02 to WGS-84 for storage
-		const wgs84Coord = this.gcj02ToWgs84([clickLngLat.getLat(), clickLngLat.getLng()]);
-		const currentLat = Math.round(wgs84Coord[0] * 100000) / 100000;
-		const currentLng = Math.round(wgs84Coord[1] * 100000) / 100000;
+		// Use GCJ-02 coordinates directly (format: [lng, lat])
+		const currentLng = Math.round(clickLngLat.getLng() * 100000) / 100000;
+		const currentLat = Math.round(clickLngLat.getLat() * 100000) / 100000;
 
 		// Get the original DOM event
 		const originalEvent = e.originEvent?.originalEvent || e.originEvent || e;
@@ -564,8 +571,8 @@ export class AMapView extends BasesView {
 			const lat = state.center.lat;
 
 			if (typeof lng === 'number' && typeof lat === 'number') {
-				// Convert from GCJ-02 to WGS-84 for storage
-				this.pendingMapState.center = this.gcj02ToWgs84([lat, lng]);
+				// Store GCJ-02 coordinates directly (format: [lng, lat])
+				this.pendingMapState.center = [lng, lat];
 			}
 		}
 		if (hasOwnProperty(state, 'zoom') && typeof state.zoom === 'number') {
@@ -581,70 +588,6 @@ export class AMapView extends BasesView {
 			center: { lng: center.getLng(), lat: center.getLat() },
 			zoom: this.map.getZoom(),
 		};
-	}
-
-	/**
-	 * WGS-84 to GCJ-02 coordinate conversion (Mars Coordinate System)
-	 */
-	private wgs84ToGcj02([lat, lng]: [number, number]): [number, number] {
-		// China's approximate bounds
-		if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
-			return [lat, lng];
-		}
-
-		let dlat = this.transformLat(lng - 105.0, lat - 35.0);
-		let dlng = this.transformLng(lng - 105.0, lat - 35.0);
-		const radlat = lat / 180.0 * Math.PI;
-		let magic = Math.sin(radlat);
-		magic = 1 - 0.00669342162296594323 * magic * magic;
-		const sqrtmagic = Math.sqrt(magic);
-		dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
-		dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
-		const mglat = lat + dlat;
-		const mglng = lng + dlng;
-
-		// Return [lng, lat] format for AMap
-		return [mglng, mglat];
-	}
-
-	/**
-	 * GCJ-02 to WGS-84 coordinate conversion
-	 */
-	private gcj02ToWgs84([lat, lng]: [number, number]): [number, number] {
-		// China's approximate bounds
-		if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
-			return [lat, lng];
-		}
-
-		let dlat = this.transformLat(lng - 105.0, lat - 35.0);
-		let dlng = this.transformLng(lng - 105.0, lat - 35.0);
-		const radlat = lat / 180.0 * Math.PI;
-		let magic = Math.sin(radlat);
-		magic = 1 - 0.00669342162296594323 * magic * magic;
-		const sqrtmagic = Math.sqrt(magic);
-		dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
-		dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
-		const mglat = lat - dlat;
-		const mglng = lng - dlng;
-
-		// Return [lat, lng] format for storage
-		return [mglat, mglng];
-	}
-
-	private transformLat(lng: number, lat: number): number {
-		let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
-		ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
-		ret += (20.0 * Math.sin(lat * Math.PI) + 40.0 * Math.sin(lat / 3.0 * Math.PI)) * 2.0 / 3.0;
-		ret += (160.0 * Math.sin(lat / 12.0 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30.0)) * 2.0 / 3.0;
-		return ret;
-	}
-
-	private transformLng(lng: number, lat: number): number {
-		let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
-		ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
-		ret += (20.0 * Math.sin(lng * Math.PI) + 40.0 * Math.sin(lng / 3.0 * Math.PI)) * 2.0 / 3.0;
-		ret += (150.0 * Math.sin(lng / 12.0 * Math.PI) + 300.0 * Math.sin(lng / 30.0 * Math.PI)) * 2.0 / 3.0;
-		return ret;
 	}
 
 	static getViewOptions(): ViewOption[] {
@@ -666,7 +609,7 @@ export class AMapView extends BasesView {
 						displayName: 'Center coordinates',
 						type: 'formula',
 						key: 'center',
-						placeholder: '[latitude, longitude]',
+						placeholder: '[longitude, latitude] (GCJ-02)',
 					},
 					{
 						displayName: 'Default zoom',

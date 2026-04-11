@@ -103,15 +103,19 @@ def generate_random_place_name(city_name: str) -> str:
 
 
 def generate_coordinates(city: dict = None) -> tuple:
-    """Generate random coordinates within a Chinese city."""
+    """Generate random GCJ-02 coordinates within a Chinese city.
+
+    Returns:
+        tuple: (longitude, latitude) in GCJ-02 format for AMap
+    """
     if city is None:
         city = random.choice(CHINA_CITIES)
 
     lat = random.uniform(city["lat"][0], city["lat"][1])
     lon = random.uniform(city["lon"][0], city["lon"][1])
 
-    # Format with appropriate precision
-    return f"{lat:.6f}", f"{lon:.6f}"
+    # Format with appropriate precision, return as (longitude, latitude) for GCJ-02
+    return f"{lon:.6f}", f"{lat:.6f}"
 
 
 def generate_place_type() -> str:
@@ -131,13 +135,17 @@ def generate_color() -> str:
 
 def create_markdown_file(directory: Path, filename: str, coordinates: tuple,
                          place_type: str, icon: str, color: str) -> None:
-    """Create a markdown file with YAML frontmatter."""
+    """Create a markdown file with YAML frontmatter.
+
+    Args:
+        coordinates: tuple of (longitude, latitude) in GCJ-02 format
+    """
     content = f"""---
 category: "[[Places]]"
 type: "{place_type}"
 coordinates:
-  - "{coordinates[0]}"
-  - "{coordinates[1]}"
+  - "{coordinates[0]}"  # longitude (GCJ-02)
+  - "{coordinates[1]}"  # latitude (GCJ-02)
 icon: "{icon}"
 color: "{color}"
 ---
@@ -145,6 +153,7 @@ color: "{color}"
 # {filename.replace('.md', '')}
 
 这是一个测试地点，用于展示 AMaps 插件的功能。
+坐标使用高德地图 GCJ-02 火星坐标系。
 """
 
     filepath = directory / filename

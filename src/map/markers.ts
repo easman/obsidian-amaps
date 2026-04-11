@@ -125,9 +125,8 @@ export class AMapMarkerManager {
 	private async createMarker(markerData: MapMarker): Promise<void> {
 		if (!this.map || !this.amapModule) return;
 
-		const [lat, lng] = markerData.coordinates;
-		// Convert WGS-84 to GCJ-02 for AMap, returns [lng, lat] format
-		const amapPosition = this.wgs84ToGcj02([lat, lng]);
+		// Use GCJ-02 coordinates directly (format: [lng, lat])
+		const amapPosition: [number, number] = markerData.coordinates;
 
 		// Create icon
 		const icon = await this.createIcon(markerData.entry);
@@ -162,10 +161,12 @@ export class AMapMarkerManager {
 
 		// Handle hover for link preview
 		marker.on('mouseover', (e: any) => {
+			const event = e?.originEvent || e;
+			if (!event) return;
 			this.app.workspace.trigger('hover-link', {
-				event: e?.originEvent?.originalEvent || e?.originalEvent,
+				event,
 				source: 'bases',
-				hoverParent: this.app.renderContext,
+				hoverParent: this.mapEl,
 				targetEl: this.mapEl,
 				linktext: markerData.entry.file.path,
 			});
@@ -344,7 +345,7 @@ export class AMapMarkerManager {
 	}
 
 	private onMarkerRightClick(markerData: MapMarker, e: any): void {
-		const [lat, lng] = markerData.coordinates;
+		const [lng, lat] = markerData.coordinates;
 		const file = markerData.entry.file;
 
 		// Get the original DOM event
@@ -371,44 +372,5 @@ export class AMapMarkerManager {
 			.onClick(() => this.app.fileManager.promptForDeletion(file)));
 
 		menu.showAtMouseEvent(originalEvent);
-	}
-
-	/**
-	 * WGS-84 to GCJ-02 coordinate conversion (Mars Coordinate System)
-	 */
-	private wgs84ToGcj02([lat, lng]: [number, number]): [number, number] {
-		// China's approximate bounds
-		if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
-			return [lat, lng];
-		}
-
-		let dlat = this.transformLat(lng - 105.0, lat - 35.0);
-		let dlng = this.transformLng(lng - 105.0, lat - 35.0);
-		const radlat = lat / 180.0 * Math.PI;
-		let magic = Math.sin(radlat);
-		magic = 1 - 0.00669342162296594323 * magic * magic;
-		const sqrtmagic = Math.sqrt(magic);
-		dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
-		dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
-		const mglat = lat + dlat;
-		const mglng = lng + dlng;
-
-		return [mglng, mglat];
-	}
-
-	private transformLat(lng: number, lat: number): number {
-		let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
-		ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
-		ret += (20.0 * Math.sin(lat * Math.PI) + 40.0 * Math.sin(lat / 3.0 * Math.PI)) * 2.0 / 3.0;
-		ret += (160.0 * Math.sin(lat / 12.0 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30.0)) * 2.0 / 3.0;
-		return ret;
-	}
-
-	private transformLng(lng: number, lat: number): number {
-		let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
-		ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
-		ret += (20.0 * Math.sin(lng * Math.PI) + 40.0 * Math.sin(lng / 3.0 * Math.PI)) * 2.0 / 3.0;
-		ret += (150.0 * Math.sin(lng / 12.0 * Math.PI) + 300.0 * Math.sin(lng / 30.0 * Math.PI)) * 2.0 / 3.0;
-		return ret;
 	}
 }

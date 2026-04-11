@@ -1,31 +1,41 @@
 import { Value, NumberValue, StringValue, ListValue } from 'obsidian';
 
 /**
- * Converts a Value to coordinate tuple [lat, lng]
+ * Converts a Value to coordinate tuple [lng, lat] (GCJ-02 format for AMap)
+ *
+ * Supports:
+ * - List values: [longitude, latitude] e.g., ["116.4074", "39.9042"]
+ * - String values: "longitude,latitude" e.g., "116.4074,39.9042"
+ *
+ * Note: This plugin only supports GCJ-02 (Mars Coordinates) used by AMap.
+ * Users should provide coordinates in GCJ-02 format.
  */
 export function coordinateFromValue(value: Value | null): [number, number] | null {
-	let lat: number | null = null;
 	let lng: number | null = null;
+	let lat: number | null = null;
 
-	// Handle list values (e.g., ["34.1395597", "-118.3870991"] or [34.1395597, -118.3870991])
+	// Handle list values (format: [longitude, latitude] for GCJ-02)
+	// e.g., ["116.4074", "39.9092"] or [116.4074, 39.9092]
 	if (value instanceof ListValue) {
 		if (value.length() >= 2) {
-			lat = parseCoordinate(value.get(0));
-			lng = parseCoordinate(value.get(1));
+			lng = parseCoordinate(value.get(0));  // longitude first
+			lat = parseCoordinate(value.get(1));  // latitude second
 		}
 	}
-	// Handle string values (e.g., "34.1395597,-118.3870991" or "34.1395597, -118.3870991")
+	// Handle string values (format: "longitude,latitude" or "[longitude, latitude]" for GCJ-02)
+	// e.g., "116.4074,39.9092" or "[116.4074, 39.9092]"
 	else if (value instanceof StringValue) {
-		// Split by comma and handle various spacing
-		const parts = value.toString().trim().split(',');
+		// Remove brackets and split by comma
+		const cleanValue = value.toString().trim().replace(/^[\[\(]|[\]\)]$/g, '');
+		const parts = cleanValue.split(',');
 		if (parts.length >= 2) {
-			lat = parseCoordinate(parts[0].trim());
-			lng = parseCoordinate(parts[1].trim());
+			lng = parseCoordinate(parts[0].trim());  // longitude first
+			lat = parseCoordinate(parts[1].trim());  // latitude second
 		}
 	}
 
-	if (lat && lng && verifyLatLng(lat, lng)) {
-		return [lat, lng];
+	if (lng !== null && lat !== null && verifyLatLng(lat, lng)) {
+		return [lng, lat];  // GCJ-02 format: [longitude, latitude]
 	}
 
 	return null;
@@ -33,9 +43,18 @@ export function coordinateFromValue(value: Value | null): [number, number] | nul
 
 /**
  * Verifies that lat/lng values are within valid ranges
+ * GCJ-02 coordinates for China mainland
  */
 export function verifyLatLng(lat: number, lng: number): boolean {
 	return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+/**
+ * Check if coordinates are within China's approximate bounds
+ * Used to validate GCJ-02 coordinates
+ */
+export function isInChina(lat: number, lng: number): boolean {
+	return lng >= 72.004 && lng <= 137.8347 && lat >= 0.8293 && lat <= 55.8271;
 }
 
 /**
@@ -67,73 +86,3 @@ export function hasOwnProperty<K extends PropertyKey>(o: unknown, v: K): o is Re
 	return o != null && typeof o === 'object' && Object.hasOwn(o, v);
 }
 
-/**
- * WGS-84 to GCJ-02 coordinate conversion (Mars Coordinate System)
- *
- * AMap uses GCJ-02 coordinate system, but most GPS devices use WGS-84.
- * This function converts WGS-84 coordinates to GCJ-02.
- *
- * Algorithm based on public domain implementation:
- * https://github.com/wandergis/coordtransform
- */
-export function wgs84ToGcj02([lat, lng]: [number, number]): [number, number] {
-	// China's approximate bounds
-	if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
-		return [lat, lng];
-	}
-
-	let dlat = transformLat(lng - 105.0, lat - 35.0);
-	let dlng = transformLng(lng - 105.0, lat - 35.0);
-	const radlat = lat / 180.0 * Math.PI;
-	let magic = Math.sin(radlat);
-	magic = 1 - 0.00669342162296594323 * magic * magic;
-	const sqrtmagic = Math.sqrt(magic);
-	dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
-	dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
-	const mglat = lat + dlat;
-	const mglng = lng + dlng;
-
-	return [mglat, mglng];
-}
-
-/**
- * GCJ-02 to WGS-84 coordinate conversion
- *
- * Converts GCJ-02 coordinates back to WGS-84.
- * Uses iterative approximation for better accuracy.
- */
-export function gcj02ToWgs84([lat, lng]: [number, number]): [number, number] {
-	// China's approximate bounds
-	if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
-		return [lat, lng];
-	}
-
-	let dlat = transformLat(lng - 105.0, lat - 35.0);
-	let dlng = transformLng(lng - 105.0, lat - 35.0);
-	const radlat = lat / 180.0 * Math.PI;
-	let magic = Math.sin(radlat);
-	magic = 1 - 0.00669342162296594323 * magic * magic;
-	const sqrtmagic = Math.sqrt(magic);
-	dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
-	dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
-	const mglat = lat - dlat;
-	const mglng = lng - dlng;
-
-	return [mglat, mglng];
-}
-
-function transformLat(lng: number, lat: number): number {
-	let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
-	ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
-	ret += (20.0 * Math.sin(lat * Math.PI) + 40.0 * Math.sin(lat / 3.0 * Math.PI)) * 2.0 / 3.0;
-	ret += (160.0 * Math.sin(lat / 12.0 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30.0)) * 2.0 / 3.0;
-	return ret;
-}
-
-function transformLng(lng: number, lat: number): number {
-	let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
-	ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
-	ret += (20.0 * Math.sin(lng * Math.PI) + 40.0 * Math.sin(lng / 3.0 * Math.PI)) * 2.0 / 3.0;
-	ret += (150.0 * Math.sin(lng / 12.0 * Math.PI) + 300.0 * Math.sin(lng / 30.0 * Math.PI)) * 2.0 / 3.0;
-	return ret;
-}
