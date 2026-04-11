@@ -126,15 +126,15 @@ export class AMapMarkerManager {
 		if (!this.map || !this.amapModule) return;
 
 		const [lat, lng] = markerData.coordinates;
-		// Convert WGS-84 to GCJ-02 for AMap
-		const gcj02Coord = this.wgs84ToGcj02([lat, lng]);
+		// Convert WGS-84 to GCJ-02 for AMap, returns [lng, lat] format
+		const amapPosition = this.wgs84ToGcj02([lat, lng]);
 
 		// Create icon
 		const icon = await this.createIcon(markerData.entry);
 
 		// Create marker
 		const marker = new this.amapModule.Marker({
-			position: gcj02Coord,
+			position: amapPosition,
 			icon: icon,
 			title: markerData.entry.file.name,
 			extData: { markerData }
@@ -393,7 +393,7 @@ export class AMapMarkerManager {
 		const mglat = lat + dlat;
 		const mglng = lng + dlng;
 
-		return [mglat, mglng];
+		return [mglng, mglat];
 	}
 
 	private transformLat(lng: number, lat: number): number {

@@ -603,7 +603,8 @@ export class AMapView extends BasesView {
 		const mglat = lat + dlat;
 		const mglng = lng + dlng;
 
-		return [mglat, mglng];
+		// Return [lng, lat] format for AMap
+		return [mglng, mglat];
 	}
 
 	/**
@@ -626,6 +627,7 @@ export class AMapView extends BasesView {
 		const mglat = lat - dlat;
 		const mglng = lng - dlng;
 
+		// Return [lat, lng] format for storage
 		return [mglat, mglng];
 	}
 
