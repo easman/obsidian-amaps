@@ -4,8 +4,8 @@ import { AMapSettings, DEFAULT_SETTINGS, AMapSettingTab } from './settings';
 import { clearAMapCache } from './amap-loader';
 import { loadEnvFromVault } from './env-loader';
 
-// Build info - update this when building
-const BUILD_NUMBER = '20260411-150515';
+// Build info - injected by esbuild during build
+declare const BUILD_NUMBER: string;
 const PLUGIN_VERSION = '1.0.0';
 
 export default class ObsidianAMapsPlugin extends Plugin {

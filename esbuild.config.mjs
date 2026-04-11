@@ -9,6 +9,10 @@ if you want to view the source, please visit the github repository of this plugi
 */
 `;
 
+// Generate build number with timestamp
+const now = new Date();
+const BUILD_NUMBER = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
 const prod = (process.argv[2] === "production");
 
 const context = await esbuild.context({
@@ -39,6 +43,9 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "main.js",
 	minify: prod,
+	define: {
+		'BUILD_NUMBER': JSON.stringify(BUILD_NUMBER),
+	},
 });
 
 if (prod) {
