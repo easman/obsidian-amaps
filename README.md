@@ -34,9 +34,27 @@ This project is forked from [obsidian-maps](https://github.com/obsidianmd/obsidi
 1. Download the latest release from GitHub
 2. Extract to your vault's `.obsidian/plugins/obsidian-amaps/` directory
 3. Enable the plugin in Obsidian Settings → Community plugins
-4. Configure your AMap API Key and Security Config in plugin settings
+4. Configure your AMap API Key and Security Config in plugin settings, or use a `.env` file (see below)
 
 ## Getting an AMap API Key
+
+1. Register an account at [AMap Developer Console](https://lbs.amap.com/dev/key)
+2. Create a new Web platform application
+3. Get your Key and Security Config (安全密钥)
+4. Enter them in the plugin settings, or use a `.env` file:
+
+### Using .env file (Recommended)
+
+Create a `.env` file in your vault root:
+
+```bash
+AMAP_API_KEY=your_api_key_here
+AMAP_SECURITY_JS_CODE=your_security_code_here
+```
+
+The plugin will automatically read API credentials from `.env`. This keeps sensitive data out of your settings and makes it easier to manage across devices.
+
+> ⚠️ **Note**: `.env` files contain sensitive information. Do not commit them to Git!
 
 1. Register an account at [AMap Developer Console](https://lbs.amap.com/dev/key)
 2. Create a new Web platform application

@@ -2,6 +2,7 @@ import { Plugin, Notice } from 'obsidian';
 import { AMapView, AMapViewType } from './amap-view';
 import { AMapSettings, DEFAULT_SETTINGS, AMapSettingTab } from './settings';
 import { clearAMapCache } from './amap-loader';
+import { loadEnvFromVault, hasEnvFile } from './env-loader';
 
 // Build info - update this when building
 const BUILD_NUMBER = '20260411-150515';
@@ -9,6 +10,7 @@ const PLUGIN_VERSION = '1.0.0';
 
 export default class ObsidianAMapsPlugin extends Plugin {
 	settings: AMapSettings;
+	envConfigLoaded: boolean = false;
 
 	async onload() {
 		// Log build info prominently
@@ -17,6 +19,15 @@ export default class ObsidianAMapsPlugin extends Plugin {
 		console.log('%cIf you do not see this message, the plugin is not loaded!', 'font-size: 12px; color: #ff8c00; font-style: italic;');
 
 		await this.loadSettings();
+
+		// Try to load from .env file
+		const envConfig = await loadEnvFromVault(this.app.vault);
+		if (envConfig.AMAP_API_KEY || envConfig.AMAP_SECURITY_JS_CODE) {
+			this.settings.apiKey = envConfig.AMAP_API_KEY || this.settings.apiKey;
+			this.settings.securityJsCode = envConfig.AMAP_SECURITY_JS_CODE || this.settings.securityJsCode;
+			this.envConfigLoaded = true;
+			console.log('[AMaps] Loaded config from .env file');
+		}
 
 		this.registerBasesView(AMapViewType, {
 			name: 'Map',
