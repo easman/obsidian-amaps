@@ -1,33 +1,56 @@
 ## Basic map
 
-Click **Map** in the top left corner of the base to configure view options. In the view configuration menu, open **Markers** to defined how markers are displayed. Markers use properties assigned to notes.
+Add coordinates to your notes:
 
-![[Places.base|Map]]
-
-For example [[Eiffel Tower]] has the following properties:
-
-| Property      | Value                    |                                                                                                                                                      |
-| ------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `coordinates` | `48.85837`<br>`2.294481` | Coordinates are stored as `latitude, longitude`. You can get coordinates by right-clicking a location on the map and selecting **Copy coordinates**. |
-| `icon`        | `landmark`               | The name of an icon from the [Lucide library](https://lucide.dev/).                                                                                  |
-| `color`       | `red`                    | A valid CSS value: hex, RGB, named color, etc.                                                                                                       |
-
-## Map with type-based markers
-
-Instead of getting the icon and color from the note, we can also get them from the note's assigned type. In this example, [[Musée d'Orsay]] is assigned the type [[Museums]]. To get the map marker from the Museum type we use [formula](https://help.obsidian.md/bases/functions) properties called **Type icon** and **Type color**:
-
-```js
-// Get the icon from the type
-list(type)[0].asFile().properties.icon
-
-// Get the color from the type
-list(type)[0].asFile().properties.color
+```yaml
+---
+coordinates:
+  - "116.3974"  # longitude
+  - "39.9092"   # latitude
+---
 ```
 
-You can see these properties by selecting **Properties** at the top of the base toolbar.
+In your Base, add a map view:
 
-![[Places.base#Type-based markers]]
+```yaml
+views:
+  - type: map
+    name: Map
+    coordinates: note.coordinates
+```
 
-## Related notes map
+Click **Map** in the top left corner to configure view options. In the view configuration menu, open **Markers** to define how markers are displayed.
 
-See the [[Museums]] note for an example of a map that only displays markers for its assigned type.
+### Optional: Custom icons and colors
+
+Add `icon` and `color` properties to customize markers:
+
+```yaml
+---
+coordinates:
+  - "116.3974"
+  - "39.9092"
+icon: "landmark"      # Lucide icon name
+color: "#c41e3a"      # CSS color
+---
+```
+
+## Coordinate Format
+
+This plugin uses **GCJ-02 coordinate system** (Mars Coordinates).
+
+Format: `[longitude, latitude]`
+
+Get GCJ-02 coordinates from: https://lbs.amap.com/tools/picker
+
+## Advanced: Type-based markers
+
+You can also get icon and color from the note's assigned type using [formulas](https://help.obsidian.md/bases/functions):
+
+```js
+// Get icon from the type
+list(type)[0].asFile().properties.icon
+
+// Get color from the type
+list(type)[0].asFile().properties.color
+```

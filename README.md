@@ -21,7 +21,7 @@ This project is forked from [obsidian-maps](https://github.com/obsidianmd/obsidi
 - Replaced MapLibre GL JS with AMap JS API 2.0
 - Optimized for China mainland users with domestic map data
 - Added AMap API Key and Security Configuration support
-- Automatic coordinate conversion (WGS-84 to GCJ-02)
+- Uses GCJ-02 coordinate system (Gaode Maps format: [longitude, latitude])
 - Removed multi-tile provider support (AMap only)
 
 ## Requirements
@@ -46,14 +46,24 @@ This project is forked from [obsidian-maps](https://github.com/obsidianmd/obsidi
 ## Usage
 
 1. Create a Base with notes containing location coordinates
-2. Add coordinates to your notes using the `coordinates` property:
+2. Add GCJ-02 coordinates to your notes:
    ```yaml
+   ---
    coordinates:
-     - "39.9042"
-     - "116.4074"
+     - "116.4074"  # longitude
+     - "39.9042"   # latitude
+   ---
    ```
-3. Switch the Base view to "Map"
-4. Configure marker properties in view options if needed
+3. In your Base, add a map view:
+   ```yaml
+   views:
+     - type: map
+       name: Map
+       coordinates: note.coordinates
+   ```
+
+> **Note**: This plugin uses GCJ-02 coordinate system (Gaode Maps format).  
+> Get coordinates from: https://lbs.amap.com/tools/picker
 
 ## Documentation
 

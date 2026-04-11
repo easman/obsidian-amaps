@@ -21,7 +21,7 @@
 - 使用高德地图 JS API 2.0 替代 MapLibre GL JS
 - 为中国大陆用户提供国内地图数据，访问更快速
 - 新增高德地图 API Key 和安全密钥配置
-- 自动进行 WGS-84 到 GCJ-02 坐标转换
+- 统一使用 GCJ-02 火星坐标系（高德地图坐标格式）
 - 移除了多瓦片提供商支持（仅保留高德地图）
 
 ## 系统要求
@@ -68,12 +68,12 @@ npm run build
 
 ### 基础用法
 
-1. 创建一个 Base，并为笔记添加坐标属性：
+1. 创建一个 Base，并为笔记添加 GCJ-02 坐标属性：
    ```yaml
    ---
    coordinates:
-     - "39.9042"    # 纬度
      - "116.4074"   # 经度
+     - "39.9042"    # 纬度
    ---
    ```
 
@@ -134,61 +134,57 @@ color: "#ff0000"
 支持以下坐标格式：
 
 ```yaml
-# 数组格式
-coordinates: ["39.9042", "116.4074"]
-coordinates: [39.9042, 116.4074]
+# 数组格式（GCJ-02 火星坐标系：[经度, 纬度]）
+coordinates: ["116.4074", "39.9042"]
+coordinates: [116.4074, 39.9042]
 
-# 列表格式
+# 列表格式（GCJ-02 火星坐标系：[经度, 纬度]）
 coordinates:
-  - "39.9042"
-  - "116.4074"
+  - "116.4074"  # 经度
+  - "39.9042"   # 纬度
 
 # 字符串格式
-coordinates: "39.9042, 116.4074"
+coordinates: "116.4074, 39.9042"
 ```
 
-**注意**：虽然输入使用 WGS-84 坐标系（国际标准），但插件会自动转换为高德地图使用的 GCJ-02 坐标系（火星坐标系）。
+**注意**：本插件只支持 GCJ-02 坐标系（火星坐标系），即高德地图使用的坐标格式。请确保输入的坐标是 GCJ-02 格式 `[经度, 纬度]`。可从高德地图坐标拾取器获取：https://lbs.amap.com/tools/picker
 
 ## 示例
 
-查看 `examples/` 目录中的示例文件，了解如何配置 Base 和笔记。
+### 基础用法
 
-### 快速示例
-
-创建 `Places` Base：
+在笔记中添加坐标：
 
 ```yaml
-filters:
-  and:
-    - categories.containsAny(link("Places"))
-properties:
-  file.name:
-    displayName: 地点名称
+---
+coordinates:
+  - "116.3972"  # 经度
+  - "39.9163"   # 纬度
+---
+```
+
+在 Base 中创建地图视图：
+
+```yaml
 views:
   - type: map
     name: 地图
     coordinates: note.coordinates
-    markerIcon: note.icon
-    markerColor: note.color
-    defaultZoom: 12
 ```
 
-创建地点笔记 `北京故宫博物院.md`：
+### 可选：自定义标记
 
 ```yaml
 ---
-category: "[[Places]]"
 coordinates:
-  - "39.9163"
   - "116.3972"
-icon: "landmark"
-color: "#c41e3a"
+  - "39.9163"
+icon: "landmark"     # 可选：自定义图标
+color: "#c41e3a"     # 可选：自定义颜色
 ---
-
-# 北京故宫博物院
-
-明清两代的皇家宫殿...
 ```
+
+查看 `examples/` 目录中的完整示例。
 
 ## 常见问题
 
@@ -199,9 +195,6 @@ A: 请检查：
 2. 网络连接是否正常
 3. 查看控制台是否有错误信息（Ctrl+Shift+I 打开开发者工具）
 
-### Q: 标记位置有偏差？
-
-A: 这是正常现象。插件会自动进行坐标转换，但如果原始数据已经是 GCJ-02 坐标，可能会出现偏移。建议统一使用 WGS-84 坐标（GPS 标准坐标）。
 
 ### Q: 支持哪些图标？
 

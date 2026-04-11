@@ -78,13 +78,13 @@ This plugin requires an AMap (Gaode Maps) API Key and Security Config.
 
 ## Coordinate System
 
-AMap uses the GCJ-02 coordinate system (also known as "Mars Coordinates"), which differs from the international WGS-84 standard.
+This plugin uses the **GCJ-02 coordinate system** (also known as "Mars Coordinates"), which is the format used by AMap (Gaode Maps).
 
-The plugin automatically converts between these systems:
-- **WGS-84 → GCJ-02**: When displaying markers on the map (input is WGS-84)
-- **GCJ-02 → WGS-84**: When reading coordinates from the map (e.g., creating notes)
+Coordinate format: `[longitude, latitude]` (e.g., `[116.4074, 39.9042]` for Beijing)
 
-Users should store coordinates in WGS-84 format in their notes.
+Users should provide coordinates in GCJ-02 format directly. You can get GCJ-02 coordinates from:
+- AMap coordinate picker: https://lbs.amap.com/tools/picker
+- Other Chinese map services that provide GCJ-02 coordinates
 
 ## Map Types
 
@@ -190,7 +190,7 @@ Follow Obsidian's **Developer Policies** and **Plugin Guidelines**. In particula
 - Write idempotent code paths so reload/unload doesn't leak listeners or intervals.
 - Use `this.register*` helpers for everything that needs cleanup.
 - Handle AMap API errors gracefully and show user-friendly messages.
-- Convert coordinates correctly between WGS-84 and GCJ-02.
+- Use GCJ-02 coordinate format `[longitude, latitude]` throughout the plugin.
 
 **Don't**
 - Introduce network calls without an obvious user-facing reason and documentation.
@@ -269,7 +269,8 @@ this.registerInterval(window.setInterval(() => { /* ... */ }, 1000));
 - Settings not persisting: ensure `loadData`/`saveData` are awaited and you re-render the UI after changes.
 - Mobile-only issues: confirm you're not using desktop-only APIs; check `isDesktopOnly` and adjust.
 - AMap not loading: verify API Key and Security Config are correct in settings.
-- Coordinates showing wrong location: ensure you're using WGS-84 format (the plugin converts to GCJ-02 automatically).
+- Coordinates showing wrong location: ensure you're using GCJ-02 format `[longitude, latitude]`.
+- Markers not showing: check that the coordinates property is correctly set and the Base filter includes the notes.
 
 ## References
 
