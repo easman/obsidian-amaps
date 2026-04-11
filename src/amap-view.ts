@@ -150,7 +150,7 @@ export class AMapView extends BasesView {
 				center: initialCenter,
 				zoom: initialZoom,
 				zooms: [this.mapConfig.minZoom, this.mapConfig.maxZoom],
-				viewMode: '2D',
+				viewMode: '3D',
 				layers: layers,
 			});
 

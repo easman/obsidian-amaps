@@ -131,12 +131,22 @@ export class AMapMarkerManager {
 		// Create icon
 		const icon = await this.createIcon(markerData.entry);
 
-		// Create marker
+		// Get document title (without .md) and color for label
+		const title = markerData.entry.file.basename || markerData.entry.file.name.replace(/\.md$/, '');
+		const color = this.getCustomColor(markerData.entry) || '#2e5c8a';
+
+		// Create marker with label
 		const marker = new this.amapModule.Marker({
 			position: amapPosition,
 			icon: icon,
 			title: markerData.entry.file.name,
-			extData: { markerData }
+			anchor: "center",
+			extData: { markerData },
+			label: {
+				content: `<span style="color:${color};font-size:12px;font-weight:700;text-shadow:0 0 2px #fff,0 0 4px #fff;white-space:nowrap;">${title}</span>`,
+				direction: 'right',
+				offset: new this.amapModule.Pixel(1, 0)
+			}
 		});
 
 		// Set up event handlers
