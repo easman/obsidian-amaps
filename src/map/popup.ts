@@ -1,9 +1,9 @@
 import { App, BasesEntry, BasesPropertyId, ListValue, Value } from 'obsidian';
-import { Popup, Map } from 'maplibre-gl';
 
-export class PopupManager {
-	private map: Map | null = null;
-	private sharedPopup: Popup | null = null;
+export class AMapPopupManager {
+	private map: AMap.Map | null = null;
+	private amapModule: typeof AMap | null = null;
+	private infoWindow: AMap.InfoWindow | null = null;
 	private popupHideTimeout: number | null = null;
 	private popupHideTimeoutWin: Window | null = null;
 	private containerEl: HTMLElement;
@@ -14,8 +14,13 @@ export class PopupManager {
 		this.app = app;
 	}
 
-	setMap(map: Map | null): void {
+	setMap(map: AMap.Map | null, amapModule: typeof AMap | null): void {
 		this.map = map;
+		this.amapModule = amapModule;
+		if (this.infoWindow) {
+			this.infoWindow.close();
+			this.infoWindow = null;
+		}
 	}
 
 	showPopup(
@@ -27,7 +32,7 @@ export class PopupManager {
 		markerColorProp: BasesPropertyId | null,
 		getDisplayName: (prop: BasesPropertyId) => string
 	): void {
-		if (!this.map) return;
+		if (!this.map || !this.amapModule) return;
 
 		// Only show popup if there are properties to display
 		if (!properties || properties.length === 0 || !this.hasAnyPropertyValues(entry, properties, coordinatesProp, markerIconProp, markerColorProp)) {
@@ -36,35 +41,37 @@ export class PopupManager {
 
 		this.clearPopupHideTimeout();
 
-		// Create shared popup if it doesn't exist
-		if (!this.sharedPopup) {
-			const sharedPopup = this.sharedPopup = new Popup({
-				closeButton: false,
-				closeOnClick: false,
-				offset: 25
+		// Create or update info window
+		const popupContent = this.createPopupContent(entry, properties, coordinatesProp, markerIconProp, markerColorProp, getDisplayName);
+
+		if (!this.infoWindow) {
+			this.infoWindow = new this.amapModule.InfoWindow({
+				content: popupContent,
+				offset: new this.amapModule.Pixel(0, -30),
+				closeWhenClickMap: false
 			});
 
-			// Add hover handlers to the popup itself
-			sharedPopup.on('open', () => {
-				const popupEl = sharedPopup.getElement();
-				if (popupEl) {
-					popupEl.addEventListener('mouseenter', () => {
+			// Add hover handlers to prevent closing when hovering over popup
+			this.infoWindow.on('open', () => {
+				const popupEl = this.infoWindow?.getContent() as HTMLElement | null;
+				if (popupEl && popupEl.parentElement) {
+					popupEl.parentElement.addEventListener('mouseenter', () => {
 						this.clearPopupHideTimeout();
 					});
-					popupEl.addEventListener('mouseleave', () => {
+					popupEl.parentElement.addEventListener('mouseleave', () => {
 						this.hidePopup();
 					});
 				}
 			});
+		} else {
+			this.infoWindow.setContent(popupContent);
 		}
 
-		// Update popup content and position
+		// Convert coordinates from WGS-84 to GCJ-02 for AMap
 		const [lat, lng] = coordinates;
-		const popupContent = this.createPopupContent(entry, properties, coordinatesProp, markerIconProp, markerColorProp, getDisplayName);
-		this.sharedPopup
-			.setDOMContent(popupContent)
-			.setLngLat([lng, lat])
-			.addTo(this.map);
+		const gcj02Coord = wgs84ToGcj02Internal([lat, lng]);
+
+		this.infoWindow.open(this.map, gcj02Coord);
 	}
 
 	hidePopup(): void {
@@ -72,8 +79,8 @@ export class PopupManager {
 
 		const win = this.popupHideTimeoutWin = this.containerEl.win;
 		this.popupHideTimeout = win.setTimeout(() => {
-			if (this.sharedPopup) {
-				this.sharedPopup.remove();
+			if (this.infoWindow) {
+				this.infoWindow.close();
 			}
 			this.popupHideTimeout = null;
 			this.popupHideTimeoutWin = null;
@@ -92,9 +99,9 @@ export class PopupManager {
 
 	destroy(): void {
 		this.clearPopupHideTimeout();
-		if (this.sharedPopup) {
-			this.sharedPopup.remove();
-			this.sharedPopup = null;
+		if (this.infoWindow) {
+			this.infoWindow.close();
+			this.infoWindow = null;
 		}
 	}
 
@@ -110,18 +117,17 @@ export class PopupManager {
 
 		// Get properties that have values
 		const propertiesSlice = properties.slice(0, 20); // Max 20 properties
-		const propertiesWithValues = [];
+		const propertiesWithValues: { prop: BasesPropertyId; value: Value }[] = [];
 
 		for (const prop of propertiesSlice) {
-			if (prop === coordinatesProp || prop === markerIconProp || prop === markerColorProp) continue; // Skip coordinates, marker icon, and marker color properties
+			if (prop === coordinatesProp || prop === markerIconProp || prop === markerColorProp) continue;
 
 			try {
 				const value = entry.getValue(prop);
 				if (value && this.hasNonEmptyValue(value)) {
 					propertiesWithValues.push({ prop, value });
 				}
-			}
-			catch {
+			} catch {
 				// Skip properties that can't be rendered
 			}
 		}
@@ -184,15 +190,14 @@ export class PopupManager {
 		const propertiesSlice = properties.slice(0, 20); // Max 20 properties
 
 		for (const prop of propertiesSlice) {
-			if (prop === coordinatesProp || prop === markerIconProp || prop === markerColorProp) continue; // Skip coordinates, marker icon, and marker color properties
+			if (prop === coordinatesProp || prop === markerIconProp || prop === markerColorProp) continue;
 
 			try {
 				const value = entry.getValue(prop);
 				if (value && this.hasNonEmptyValue(value)) {
 					return true;
 				}
-			}
-			catch {
+			} catch {
 				// Skip properties that can't be rendered
 			}
 		}
@@ -201,3 +206,42 @@ export class PopupManager {
 	}
 }
 
+/**
+ * Internal WGS-84 to GCJ-02 conversion for popup positioning
+ * Simplified version for use within this module
+ */
+function wgs84ToGcj02Internal([lat, lng]: [number, number]): [number, number] {
+	// China's approximate bounds
+	if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
+		return [lat, lng];
+	}
+
+	let dlat = transformLat(lng - 105.0, lat - 35.0);
+	let dlng = transformLng(lng - 105.0, lat - 35.0);
+	const radlat = lat / 180.0 * Math.PI;
+	let magic = Math.sin(radlat);
+	magic = 1 - 0.00669342162296594323 * magic * magic;
+	const sqrtmagic = Math.sqrt(magic);
+	dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
+	dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
+	const mglat = lat + dlat;
+	const mglng = lng + dlng;
+
+	return [mglat, mglng];
+}
+
+function transformLat(lng: number, lat: number): number {
+	let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
+	ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
+	ret += (20.0 * Math.sin(lat * Math.PI) + 40.0 * Math.sin(lat / 3.0 * Math.PI)) * 2.0 / 3.0;
+	ret += (160.0 * Math.sin(lat / 12.0 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30.0)) * 2.0 / 3.0;
+	return ret;
+}
+
+function transformLng(lng: number, lat: number): number {
+	let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
+	ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
+	ret += (20.0 * Math.sin(lng * Math.PI) + 40.0 * Math.sin(lng / 3.0 * Math.PI)) * 2.0 / 3.0;
+	ret += (150.0 * Math.sin(lng / 12.0 * Math.PI) + 300.0 * Math.sin(lng / 30.0 * Math.PI)) * 2.0 / 3.0;
+	return ret;
+}

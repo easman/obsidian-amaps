@@ -1,101 +1,24 @@
-import { App, Modal, PluginSettingTab, Setting, setIcon, setTooltip } from 'obsidian';
-import ObsidianMapsPlugin from './main';
+import { App, Modal, Notice, PluginSettingTab, Setting, setIcon, setTooltip } from 'obsidian';
+import ObsidianAMapsPlugin from './main';
 
-export interface TileSet {
-	id: string;
-	name: string;
-	lightTiles: string;
-	darkTiles: string;
+export type MapType = 'standard' | 'satellite' | 'hybrid';
+
+export interface AMapSettings {
+	apiKey: string;
+	securityJsCode: string;
+	defaultMapType: MapType;
 }
 
-export interface MapSettings {
-	tileSets: TileSet[];
-}
-
-export const DEFAULT_SETTINGS: MapSettings = {
-	tileSets: [],
+export const DEFAULT_SETTINGS: AMapSettings = {
+	apiKey: '',
+	securityJsCode: '',
+	defaultMapType: 'standard',
 };
 
-class TileSetModal extends Modal {
-	tileSet: TileSet;
-	onSave: (tileSet: TileSet) => void;
-	isNew: boolean;
+export class AMapSettingTab extends PluginSettingTab {
+	plugin: ObsidianAMapsPlugin;
 
-	constructor(app: App, tileSet: TileSet | null, onSave: (tileSet: TileSet) => void) {
-		super(app);
-		this.isNew = !tileSet;
-		this.tileSet = tileSet || {
-			id: Date.now().toString(),
-			name: '',
-			lightTiles: '',
-			darkTiles: ''
-		};
-		this.onSave = onSave;
-	}
-
-	onOpen() {
-		const { contentEl, modalEl } = this;
-		
-		this.setTitle(this.isNew ? 'Add background' : 'Edit background');
-
-		new Setting(contentEl)
-			.setName('Name')
-			.setDesc('A name for this background.')
-			.addText(text => text
-				.setPlaceholder('e.g. Terrain, Satellite')
-				.setValue(this.tileSet.name)
-				.onChange(value => {
-					this.tileSet.name = value;
-				})
-			);
-
-		const lightModeSetting = new Setting(contentEl)
-			.setName('Light mode')
-			.addText(text => text
-				.setPlaceholder('https://tiles.openfreemap.org/styles/bright')
-				.setValue(this.tileSet.lightTiles)
-				.onChange(value => {
-					this.tileSet.lightTiles = value;
-				})
-			);
-		
-		lightModeSetting.descEl.innerHTML = 'Tile URL or style URL for light mode. See the <a href="https://help.obsidian.md/bases/views/map">Map view documentation</a> for examples.';
-
-		new Setting(contentEl)
-			.setName('Dark mode (optional)')
-			.setDesc('Tile URL or style URL for dark mode. If not specified, light mode tiles will be used.')
-			.addText(text => text
-				.setPlaceholder('https://tiles.openfreemap.org/styles/dark')
-				.setValue(this.tileSet.darkTiles)
-				.onChange(value => {
-					this.tileSet.darkTiles = value;
-				})
-			);
-
-		const buttonContainerEl = modalEl.createDiv('modal-button-container');
-		
-		buttonContainerEl.createEl('button', { cls: 'mod-cta', text: 'Save' })
-			.addEventListener('click', () => {
-				this.onSave(this.tileSet);
-				this.close();
-			});
-		
-		buttonContainerEl.createEl('button', { text: 'Cancel' })
-			.addEventListener('click', () => {
-				this.close();
-			});
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
-
-export class MapSettingTab extends PluginSettingTab {
-	plugin: ObsidianMapsPlugin;
-
-	constructor(app: App, plugin: ObsidianMapsPlugin) {
+	constructor(app: App, plugin: ObsidianAMapsPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -104,62 +27,61 @@ export class MapSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		containerEl.createEl('h2', { text: 'AMap Configuration' });
+
+		// API Key setting
 		new Setting(containerEl)
-			.setHeading()
-			.setName('Backgrounds')
-			.addButton(button => button
-				.setButtonText('Add background')
-				.setCta()
-				.onClick(() => {
-					new TileSetModal(this.app, null, async (tileSet) => {
-						this.plugin.settings.tileSets.push(tileSet);
-						await this.plugin.saveSettings();
-						this.display();
-					}).open();
-				})
-			);
-
-		// Display existing tile sets as a list
-		const listContainer = containerEl.createDiv('map-tileset-list');
-		
-		this.plugin.settings.tileSets.forEach((tileSet, index) => {
-			this.displayTileSetItem(listContainer, tileSet, index);
-		});
-
-		if (this.plugin.settings.tileSets.length === 0) {
-			listContainer.createDiv({
-				cls: 'mobile-option-setting-item',
-				text: 'Add background sets available to all maps.'
-			});
-		}
-	}
-
-	private displayTileSetItem(containerEl: HTMLElement, tileSet: TileSet, index: number): void {
-		const itemEl = containerEl.createDiv('mobile-option-setting-item');
-
-		itemEl.createSpan({ cls: 'mobile-option-setting-item-name', text: tileSet.name || 'Untitled' });
-
-		itemEl.createDiv('clickable-icon', el => {
-			setIcon(el, 'pencil');
-			setTooltip(el, 'Edit');
-			el.addEventListener('click', () => {
-				new TileSetModal(this.app, { ...tileSet }, async (updatedTileSet) => {
-					this.plugin.settings.tileSets[index] = updatedTileSet;
+			.setName('API Key')
+			.setDesc('Your AMap (Gaode Maps) API Key. Get one at https://lbs.amap.com/dev/key')
+			.addText(text => text
+				.setPlaceholder('Enter your API Key')
+				.setValue(this.plugin.settings.apiKey)
+				.onChange(async (value) => {
+					this.plugin.settings.apiKey = value.trim();
 					await this.plugin.saveSettings();
-					this.display();
-				}).open();
-			});
-		});
+				}));
 
-		itemEl.createDiv('clickable-icon', el => {
-			setIcon(el, 'trash-2');
-			setTooltip(el, 'Delete');
-			el.addEventListener('click', async () => {
-				this.plugin.settings.tileSets.splice(index, 1);
-				await this.plugin.saveSettings();
-				this.display();
+		// Security Config setting
+		new Setting(containerEl)
+			.setName('Security Config')
+			.setDesc('Your AMap Security Config (安全密钥). Required for API keys created after Dec 2, 2021.')
+			.addText(text => {
+				text.inputEl.type = 'password';
+				text.setPlaceholder('Enter your Security Config')
+					.setValue(this.plugin.settings.securityJsCode)
+					.onChange(async (value) => {
+						this.plugin.settings.securityJsCode = value.trim();
+						await this.plugin.saveSettings();
+					});
 			});
-		});
+
+		// Default Map Type setting
+		new Setting(containerEl)
+			.setName('Default Map Type')
+			.setDesc('The default map type to display.')
+			.addDropdown(dropdown => dropdown
+				.addOption('standard', 'Standard')
+				.addOption('satellite', 'Satellite')
+				.addOption('hybrid', 'Hybrid (Satellite + Labels)')
+				.setValue(this.plugin.settings.defaultMapType)
+				.onChange(async (value) => {
+					this.plugin.settings.defaultMapType = value as MapType;
+					await this.plugin.saveSettings();
+				}));
+
+		// Help section
+		containerEl.createEl('h3', { text: 'Help', cls: 'setting-item-heading' });
+
+		const helpEl = containerEl.createDiv('setting-item-description');
+		helpEl.innerHTML = `
+			<p><strong>How to get AMap API Key:</strong></p>
+			<ol>
+				<li>Go to <a href="https://lbs.amap.com/dev/key">AMap Developer Console</a></li>
+				<li>Register or log in to your account</li>
+				<li>Create a new application with "Web Platform (JS API)"</li>
+				<li>Copy the Key and Security Config to the fields above</li>
+			</ol>
+			<p><strong>Note:</strong> Both API Key and Security Config are required for the plugin to work.</p>
+		`;
 	}
 }
-

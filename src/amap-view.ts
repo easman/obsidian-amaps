@@ -9,16 +9,13 @@ import {
 	NullValue,
 	ViewOption,
 } from 'obsidian';
-import { LngLatLike, Map, setRTLTextPlugin } from 'maplibre-gl';
-import type ObsidianMapsPlugin from './main';
+import type ObsidianAMapsPlugin from './main';
 import { DEFAULT_MAP_HEIGHT, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from './map/constants';
-import { CustomZoomControl } from './map/controls/zoom-control';
-import { BackgroundSwitcherControl } from './map/controls/background-switcher';
-import { StyleManager } from './map/style';
-import { PopupManager } from './map/popup';
-import { MarkerManager } from './map/markers';
+import { AMapPopupManager } from './map/popup';
+import { AMapMarkerManager } from './map/markers';
 import { hasOwnProperty, coordinateFromValue } from './map/utils';
-import { rtlPluginCode } from './map/rtl-plugin-code';
+import { loadAMap } from './amap-loader';
+import type { MapType } from './settings';
 
 interface MapConfig {
 	coordinatesProp: BasesPropertyId | null;
@@ -29,37 +26,33 @@ interface MapConfig {
 	center: [number, number];
 	maxZoom: number;
 	minZoom: number;
-	mapTiles: string[];
-	mapTilesDark: string[];
-	currentTileSetId: string | null;
+	mapType: MapType;
 }
 
-export const MapViewType = 'map';
+export const AMapViewType = 'map';
 
-export class MapView extends BasesView {
-	type = MapViewType;
+export class AMapView extends BasesView {
+	type = AMapViewType;
 	scrollEl: HTMLElement;
 	containerEl: HTMLElement;
 	mapEl: HTMLElement;
-	plugin: ObsidianMapsPlugin;
+	plugin: ObsidianAMapsPlugin;
 
 	// Internal rendering data
-	private map: Map | null = null;
+	private map: AMap.Map | null = null;
+	private amapModule: typeof AMap | null = null;
 	private mapConfig: MapConfig | null = null;
-	private pendingMapState: { center?: LngLatLike, zoom?: number } | null = null;
+	private pendingMapState: { center?: [number, number], zoom?: number } | null = null;
 	private isFirstLoad = true;
 	private lastConfigSnapshot: string | null = null;
 	private lastEvaluatedCenter: [number, number] = DEFAULT_MAP_CENTER;
 
 	// Managers
-	private styleManager: StyleManager;
-	private popupManager: PopupManager;
-	private markerManager: MarkerManager;
+	private popupManager: AMapPopupManager;
+	private markerManager: AMapMarkerManager;
+	private apiError: string | null = null;
 
-	// Static flag to track RTL plugin initialization
-	private static rtlPluginInitialized = false;
-
-	constructor(controller: QueryController, scrollEl: HTMLElement, plugin: ObsidianMapsPlugin) {
+	constructor(controller: QueryController, scrollEl: HTMLElement, plugin: ObsidianAMapsPlugin) {
 		super(controller);
 		this.scrollEl = scrollEl;
 		this.plugin = plugin;
@@ -67,9 +60,8 @@ export class MapView extends BasesView {
 		this.mapEl = this.containerEl.createDiv('bases-map');
 
 		// Initialize managers
-		this.styleManager = new StyleManager(this.app);
-		this.popupManager = new PopupManager(this.containerEl, this.app);
-		this.markerManager = new MarkerManager(
+		this.popupManager = new AMapPopupManager(this.containerEl, this.app);
+		this.markerManager = new AMapMarkerManager(
 			this.app,
 			this.mapEl,
 			this.popupManager,
@@ -81,17 +73,16 @@ export class MapView extends BasesView {
 	}
 
 	onload(): void {
-		// Listen for theme changes to update map tiles
-		this.registerEvent(this.app.workspace.on('css-change', this.onThemeChange, this));
+		// No theme change listener needed - AMap handles its own style
 	}
 
 	onunload() {
 		this.destroyMap();
 	}
 
-	/** Reduce flashing due to map re-rendering by debouncing while resizes are still ocurring. */
+	/** Reduce flashing due to map re-rendering by debouncing while resizes are still occurring. */
 	private onResizeDebounce = debounce(
-		() => { if (this.map) this.map.resize() },
+		() => { if (this.map) this.map.getContainer().style.height = this.mapEl.clientHeight + 'px'; },
 		100,
 		true);
 
@@ -103,183 +94,172 @@ export class MapView extends BasesView {
 		this.containerEl.focus({ preventScroll: true });
 	}
 
-	private onThemeChange = (): void => {
-		if (this.map) {
-			void this.updateMapStyle();
-		}
-	};
-
-	private async updateMapStyle(): Promise<void> {
-		if (!this.map || !this.mapConfig) return;
-		const newStyle = await this.styleManager.getMapStyle(this.mapConfig.mapTiles, this.mapConfig.mapTilesDark);
-		this.map.setStyle(newStyle);
-		this.markerManager.clearLoadedIcons();
-
-		// Re-add markers after style change since setStyle removes all runtime layers
-		this.map.once('styledata', () => {
-			void this.markerManager.updateMarkers(this.data);
-		});
-	}
-
-	private async switchToTileSet(tileSetId: string): Promise<void> {
-		const tileSet = this.plugin.settings.tileSets.find(ts => ts.id === tileSetId);
-		if (!tileSet || !this.mapConfig) return;
-
-		this.mapConfig.currentTileSetId = tileSetId;
-
-		// Update the current tiles
-		this.mapConfig.mapTiles = tileSet.lightTiles ? [tileSet.lightTiles] : [];
-		this.mapConfig.mapTilesDark = tileSet.darkTiles
-			? [tileSet.darkTiles]
-			: (tileSet.lightTiles ? [tileSet.lightTiles] : []);
-
-		// Update the map style
-		await this.updateMapStyle();
-	}
-
 	private async initializeMap(): Promise<void> {
 		if (this.map) return;
 
-		// Initialize RTL text plugin once
-		if (!MapView.rtlPluginInitialized) {
-			try {
-				// Create a blob URL from the bundled RTL plugin code
-				// The plugin needs to run in a worker context
-				const blob = new Blob([rtlPluginCode], { type: 'application/javascript' });
-				const blobURL = URL.createObjectURL(blob);
-				// Set lazy loading to false - plugin is initialized since code is already bundled
-				setRTLTextPlugin(blobURL, false);
-				MapView.rtlPluginInitialized = true;
-			} catch (error) {
-				console.warn('Failed to initialize RTL text plugin:', error);
-			}
+		// Check if API key is configured
+		if (!this.plugin.settings.apiKey || !this.plugin.settings.securityJsCode) {
+			this.apiError = 'Please configure AMap API Key and Security Config in plugin settings.';
+			this.showError();
+			return;
 		}
 
 		// Load config first
-		const currentTileSetId = this.mapConfig?.currentTileSetId || null;
-		this.mapConfig = this.loadConfig(currentTileSetId);
+		this.mapConfig = this.loadConfig();
 
 		// Set initial map height based on context
 		const isEmbedded = this.isEmbedded();
 		if (isEmbedded) {
 			this.mapEl.style.height = this.mapConfig.mapHeight + 'px';
-		}
-		else {
+		} else {
 			// Let CSS handle the height for direct base file views
 			this.mapEl.style.height = '';
 		}
 
-		// Get the map style (may involve fetching remote style JSON)
-		const mapStyle = await this.styleManager.getMapStyle(this.mapConfig.mapTiles, this.mapConfig.mapTilesDark);
+		try {
+			// Load AMap module
+			this.amapModule = await loadAMap({
+				apiKey: this.plugin.settings.apiKey,
+				securityJsCode: this.plugin.settings.securityJsCode,
+			});
 
-		// Determine initial position: prefer ephemeral state if available, otherwise use config
-		let initialCenter: [number, number] = [this.mapConfig.center[1], this.mapConfig.center[0]]; // MapLibre uses [lng, lat]
-		let initialZoom = this.mapConfig.defaultZoom;
+			// Convert center from WGS-84 to GCJ-02
+			const centerGcj02 = this.wgs84ToGcj02(this.mapConfig.center);
 
-		// Capture if we are starting with a pending state restoration
-		const isRestoringState = this.pendingMapState !== null;
+			// Determine initial position: prefer ephemeral state if available, otherwise use config
+			let initialCenter: [number, number] = centerGcj02;
+			let initialZoom = this.mapConfig.defaultZoom;
 
-		if (this.pendingMapState) {
-			if (this.pendingMapState.center) {
-				const c = this.pendingMapState.center;
-				// Handle LngLatLike (array or object)
-				if (Array.isArray(c)) {
-					initialCenter = [c[0], c[1]];
-				} else if (typeof c === 'object' && 'lng' in c && 'lat' in c) {
-					initialCenter = [c.lng, c.lat];
+			if (this.pendingMapState) {
+				if (this.pendingMapState.center) {
+					initialCenter = this.wgs84ToGcj02(this.pendingMapState.center);
+				}
+				if (this.pendingMapState.zoom !== undefined && this.pendingMapState.zoom !== null) {
+					initialZoom = this.pendingMapState.zoom;
 				}
 			}
-			if (this.pendingMapState.zoom !== undefined && this.pendingMapState.zoom !== null) {
-				initialZoom = this.pendingMapState.zoom;
-			}
+
+			// Determine layers based on map type
+			const layers = this.getMapLayers(this.mapConfig.mapType);
+
+			// Create AMap instance
+			this.map = new this.amapModule.Map(this.mapEl, {
+				center: initialCenter,
+				zoom: initialZoom,
+				zooms: [this.mapConfig.minZoom, this.mapConfig.maxZoom],
+				viewMode: '2D',
+				layers: layers,
+			});
+
+			// Set map reference in managers
+			this.popupManager.setMap(this.map, this.amapModule);
+			this.markerManager.setMap(this.map, this.amapModule);
+
+			// Add built-in controls
+			this.map.addControl(new this.amapModule.ToolBar({
+				position: 'RB',
+			}));
+			this.map.addControl(new this.amapModule.MapType({
+				defaultType: this.getDefaultMapTypeIndex(this.mapConfig.mapType),
+			}));
+			this.map.addControl(new this.amapModule.Scale({
+				position: 'LB',
+			}));
+
+			// Add context menu to map
+			this.map.on('rightclick', (e: any) => {
+				this.showMapContextMenu(e);
+			});
+
+			// Handle map load complete
+			this.map.on('complete', () => {
+				this.containerEl.removeClass('is-loading');
+			});
+
+			// Ensure the center and zoom are set after map loads
+			this.map.on('complete', () => {
+				if (!this.map || !this.mapConfig) return;
+
+				const hasConfiguredCenter = this.mapConfig.center[0] !== 0 || this.mapConfig.center[1] !== 0;
+				const hasConfiguredZoom = this.config.get('defaultZoom') && typeof this.config.get('defaultZoom') === 'number';
+
+				if (!this.pendingMapState) {
+					if (hasConfiguredCenter) {
+						this.map.setCenter(this.wgs84ToGcj02(this.mapConfig.center));
+					} else {
+						const bounds = this.markerManager.getBounds();
+						if (bounds) {
+							this.map.setCenter(bounds.getCenter());
+						}
+					}
+
+					if (hasConfiguredZoom) {
+						this.map.setZoom(this.mapConfig.defaultZoom);
+					} else {
+						const bounds = this.markerManager.getBounds();
+						if (bounds) {
+							this.map.setFitView();
+						}
+					}
+				}
+			});
+
+			// Hide tooltip on the map element
+			this.mapEl.querySelector('canvas')?.style.setProperty('--no-tooltip', 'true');
+
+		} catch (error) {
+			console.error('Failed to initialize map:', error);
+			this.apiError = error instanceof Error ? error.message : 'Failed to load map';
+			this.showError();
 		}
+	}
 
-		// Initialize MapLibre GL JS map with configured tiles or default style
-		this.map = new Map({
-			container: this.mapEl,
-			style: mapStyle,
-			center: initialCenter,
-			zoom: initialZoom,
-			minZoom: this.mapConfig.minZoom,
-			maxZoom: this.mapConfig.maxZoom,
-		});
+	private getMapLayers(mapType: MapType): AMap.TileLayer[] {
+		if (!this.amapModule) return [];
 
-		// Set map reference in managers
-		this.popupManager.setMap(this.map);
-		this.markerManager.setMap(this.map);
-
-		this.map.addControl(new CustomZoomControl(), 'top-right');
-
-		// Add background switcher if multiple tile sets are available
-		if (this.plugin.settings.tileSets.length > 1) {
-			const currentId = this.mapConfig.currentTileSetId || this.plugin.settings.tileSets[0]?.id || '';
-			if (currentId) {
-				this.map.addControl(
-					new BackgroundSwitcherControl(
-						this.plugin.settings.tileSets,
-						currentId,
-						(tileSetId) => this.switchToTileSet(tileSetId)
-					),
-					'top-right'
-				);
-			}
+		switch (mapType) {
+			case 'satellite':
+				return [new this.amapModule.TileLayer.Satellite()];
+			case 'hybrid':
+				return [
+					new this.amapModule.TileLayer.Satellite(),
+					new this.amapModule.TileLayer.RoadNet(),
+				];
+			case 'standard':
+			default:
+				return [];
 		}
+	}
 
-		this.map.on('error', (e) => {
-			console.warn('Map error:', e);
-		});
+	private getDefaultMapTypeIndex(mapType: MapType): number {
+		switch (mapType) {
+			case 'satellite':
+				return 1;
+			case 'hybrid':
+				return 1; // Satellite with road net overlay
+			case 'standard':
+			default:
+				return 0;
+		}
+	}
 
-		// Ensure the center and zoom are set after map loads (in case the style loading overrides it)
-		this.map.on('load', () => {
-			if (!this.map || !this.mapConfig) return;
-
-			// If we were restoring state, do not reset to defaults
-			if (isRestoringState || this.pendingMapState) return;
-
-			const hasConfiguredCenter = this.mapConfig.center[0] !== 0 || this.mapConfig.center[1] !== 0;
-			const hasConfiguredZoom = this.config.get('defaultZoom') && Number.isNumber(this.config.get('defaultZoom'));
-
-			// Set center based on configuration
-			if (hasConfiguredCenter) {
-				this.map.setCenter([this.mapConfig.center[1], this.mapConfig.center[0]]); // MapLibre uses [lng, lat]
-			}
-			else {
-				const bounds = this.markerManager.getBounds();
-				if (bounds) {
-					this.map.setCenter(bounds.getCenter()); // Center on markers
-				}
-			}
-
-			// Set zoom based on configuration
-			if (hasConfiguredZoom) {
-				this.map.setZoom(this.mapConfig.defaultZoom); // Use configured zoom
-			}
-			else {
-				const bounds = this.markerManager.getBounds();
-				if (bounds) {
-					this.map.fitBounds(bounds, { padding: 20 }); // Fit all markers
-				}
-			}
-		});
-
-		// Hide tooltip on the map element.
-		this.mapEl.querySelector('canvas')?.style
-			.setProperty('--no-tooltip', 'true');
-
-		// Add context menu to map
-		this.mapEl.addEventListener('contextmenu', (evt) => {
-			evt.preventDefault();
-			this.showMapContextMenu(evt);
-		});
+	private showError(): void {
+		this.containerEl.removeClass('is-loading');
+		this.containerEl.addClass('has-error');
+		this.mapEl.empty();
+		const errorEl = this.mapEl.createDiv('bases-map-error');
+		errorEl.createEl('p', { text: 'Map Error' });
+		errorEl.createEl('p', { text: this.apiError || 'Unknown error', cls: 'error-message' });
 	}
 
 	private destroyMap(): void {
 		this.popupManager.destroy();
 		if (this.map) {
-			this.map.remove();
+			this.map.destroy();
 			this.map = null;
 		}
-		this.markerManager.setMap(null);
+		this.markerManager.setMap(null, null);
+		this.amapModule = null;
 	}
 
 	public onDataUpdated(): void {
@@ -288,8 +268,7 @@ export class MapView extends BasesView {
 		const configSnapshot = this.getConfigSnapshot();
 		const configChanged = this.lastConfigSnapshot !== configSnapshot;
 
-		const currentTileSetId = this.mapConfig?.currentTileSetId || null;
-		this.mapConfig = this.loadConfig(currentTileSetId);
+		this.mapConfig = this.loadConfig();
 
 		// Check if the evaluated center coordinates have changed
 		const centerChanged = this.mapConfig.center[0] !== this.lastEvaluatedCenter[0] ||
@@ -303,8 +282,6 @@ export class MapView extends BasesView {
 				this.isFirstLoad = false;
 			}
 			// Update center when the evaluated center coordinates change
-			// (e.g., due to formula re-evaluation when active file changes)
-			// But skip if we're restoring ephemeral state
 			else if (this.map && !this.isFirstLoad && centerChanged && this.pendingMapState === null) {
 				this.updateCenter();
 			}
@@ -316,7 +293,7 @@ export class MapView extends BasesView {
 				if (this.pendingMapState && this.map) {
 					const { center, zoom } = this.pendingMapState;
 					if (center) {
-						this.map.setCenter(center);
+						this.map.setCenter(this.wgs84ToGcj02(center));
 					}
 					if (zoom !== null && zoom !== undefined) {
 						this.map.setZoom(zoom);
@@ -346,16 +323,9 @@ export class MapView extends BasesView {
 
 		const hasConfiguredCenter = this.mapConfig.center[0] !== 0 || this.mapConfig.center[1] !== 0;
 		if (hasConfiguredCenter) {
-			// Only recenter if the evaluated coordinates actually changed
-			const currentCenter = this.map.getCenter();
-			if (!currentCenter) return; // Map not fully initialized yet
-
-			const targetCenter: [number, number] = [this.mapConfig.center[1], this.mapConfig.center[0]]; // MapLibre uses [lng, lat]
-			const centerActuallyChanged = Math.abs(currentCenter.lng - targetCenter[0]) > 0.00001 ||
-				Math.abs(currentCenter.lat - targetCenter[1]) > 0.00001;
-			if (centerActuallyChanged) {
-				this.map.setCenter(targetCenter);
-			}
+			// Convert WGS-84 to GCJ-02 for AMap
+			const gcj02Center = this.wgs84ToGcj02(this.mapConfig.center);
+			this.map.setCenter(gcj02Center);
 		}
 	}
 
@@ -369,13 +339,9 @@ export class MapView extends BasesView {
 		// Detect what changed
 		const centerConfigChanged = oldConfig?.center !== newConfig.center;
 		const zoomConfigChanged = oldConfig?.defaultZoom !== newConfig.defaultZoom;
-		const tilesChanged = JSON.stringify(oldConfig?.mapTiles) !== JSON.stringify(newConfig.mapTiles) ||
-			JSON.stringify(oldConfig?.mapTilesDark) !== JSON.stringify(newConfig.mapTilesDark);
 		const heightChanged = oldConfig?.mapHeight !== newConfig.mapHeight;
 
-		// Update map constraints
-		this.map.setMinZoom(this.mapConfig.minZoom);
-		this.map.setMaxZoom(this.mapConfig.maxZoom);
+		// Note: AMap doesn't have setZooms method, zooms are set at initialization
 
 		// Clamp current zoom to new min/max bounds
 		const currentZoom = this.map.getZoom();
@@ -386,47 +352,30 @@ export class MapView extends BasesView {
 		}
 
 		// Skip updating zoom/center if we have pending ephemeral state to restore
-		// (e.g., when navigating back in history to restore the user's last pan/zoom)
 		const hasEphemeralState = this.pendingMapState !== null;
 
 		// Only update zoom on first load or when zoom config explicitly changed
-		// But skip if we're restoring ephemeral state
 		if (!hasEphemeralState && (this.isFirstLoad || zoomConfigChanged)) {
 			this.updateZoom();
 		}
 
 		// Update center on first load or when center config changed
-		// But skip if we're restoring ephemeral state
 		if (!hasEphemeralState && (this.isFirstLoad || centerConfigChanged)) {
 			this.updateCenter();
-		}
-
-		// Update map style if tiles configuration changed
-		if (this.isFirstLoad || tilesChanged) {
-			const newStyle = await this.styleManager.getMapStyle(this.mapConfig.mapTiles, this.mapConfig.mapTilesDark);
-			const currentStyle = this.map.getStyle();
-			if (JSON.stringify(newStyle) !== JSON.stringify(currentStyle)) {
-				this.map.setStyle(newStyle);
-				this.markerManager.clearLoadedIcons();
-			}
 		}
 
 		// Update map height for embedded views if height changed
 		if (this.isFirstLoad || heightChanged) {
 			if (this.isEmbedded()) {
 				this.mapEl.style.height = this.mapConfig.mapHeight + 'px';
-			}
-			else {
+			} else {
 				this.mapEl.style.height = '';
 			}
-			// Resize map after height changes
-			this.map.resize();
 		}
 	}
 
 	isEmbedded(): boolean {
 		// Check if this map view is embedded in a markdown file rather than opened directly
-		// If the scrollEl has a parent with 'bases-embed' class, it's embedded
 		let element = this.scrollEl.parentElement;
 		while (element) {
 			if (element.hasClass('bases-embed') || element.hasClass('block-language-base')) {
@@ -437,7 +386,7 @@ export class MapView extends BasesView {
 		return false;
 	}
 
-	private loadConfig(currentTileSetId: string | null): MapConfig {
+	private loadConfig(): MapConfig {
 		// Load property configurations
 		const coordinatesProp = this.config.getAsPropertyId('coordinates');
 		const markerIconProp = this.config.getAsPropertyId('markerIcon');
@@ -456,38 +405,8 @@ export class MapView extends BasesView {
 			? this.getNumericConfig('mapHeight', DEFAULT_MAP_HEIGHT, 100, 2000)
 			: DEFAULT_MAP_HEIGHT;
 
-		// Load map tiles configurations
-		// Use view-specific tiles if configured, otherwise fall back to plugin defaults
-		const viewSpecificTiles = this.getArrayConfig('mapTiles');
-		const viewSpecificTilesDark = this.getArrayConfig('mapTilesDark');
-
-		let mapTiles: string[];
-		let mapTilesDark: string[];
-		let selectedTileSetId: string | null;
-
-		if (viewSpecificTiles.length > 0) {
-			// View has specific tiles configured
-			mapTiles = viewSpecificTiles;
-			mapTilesDark = viewSpecificTilesDark;
-			selectedTileSetId = null;
-		} else if (this.plugin.settings.tileSets.length > 0) {
-			// Use first tile set from plugin settings (or previously selected one)
-			const tileSet = currentTileSetId
-				? this.plugin.settings.tileSets.find(ts => ts.id === currentTileSetId)
-				: null;
-			const selectedTileSet = tileSet || this.plugin.settings.tileSets[0];
-
-			selectedTileSetId = selectedTileSet.id;
-			mapTiles = selectedTileSet.lightTiles ? [selectedTileSet.lightTiles] : [];
-			mapTilesDark = selectedTileSet.darkTiles
-				? [selectedTileSet.darkTiles]
-				: (selectedTileSet.lightTiles ? [selectedTileSet.lightTiles] : []);
-		} else {
-			// No tiles configured, will fall back to default style
-			mapTiles = [];
-			mapTilesDark = [];
-			selectedTileSetId = null;
-		}
+		// Load map type
+		const mapType = this.config.get('mapType') as MapType || this.plugin.settings.defaultMapType;
 
 		return {
 			coordinatesProp,
@@ -498,9 +417,7 @@ export class MapView extends BasesView {
 			center,
 			maxZoom,
 			minZoom,
-			mapTiles,
-			mapTilesDark,
-			currentTileSetId: selectedTileSetId,
+			mapType,
 		};
 	}
 
@@ -514,26 +431,9 @@ export class MapView extends BasesView {
 		return result;
 	}
 
-	private getArrayConfig(key: string): string[] {
-		const value = this.config.get(key);
-		if (!value) return [];
-
-		// Handle array values
-		if (Array.isArray(value)) {
-			return value.filter(item => typeof item === 'string' && item.trim().length > 0);
-		}
-
-		// Handle single string value
-		if (typeof value === 'string' && value.trim().length > 0) {
-			return [value.trim()];
-		}
-
-		return [];
-	}
-
 	private getCenterFromConfig(): [number, number] {
 		let centerConfig: Value;
-		
+
 		try {
 			centerConfig = this.config.getEvaluatedFormula(this, 'center');
 		} catch (error) {
@@ -542,19 +442,17 @@ export class MapView extends BasesView {
 			const centerConfigStr = this.config.get('center');
 			if (String.isString(centerConfigStr)) {
 				centerConfig = new StringValue(centerConfigStr);
-			}
-			else {
+			} else {
 				return DEFAULT_MAP_CENTER;
 			}
 		}
 
-		// Support for legacy string format.
+		// Support for legacy string format
 		if (Value.equals(centerConfig, NullValue.value)) {
 			const centerConfigStr = this.config.get('center');
 			if (String.isString(centerConfigStr)) {
 				centerConfig = new StringValue(centerConfigStr);
-			}
-			else {
+			} else {
 				return DEFAULT_MAP_CENTER;
 			}
 		}
@@ -569,23 +467,28 @@ export class MapView extends BasesView {
 			minZoom: this.config.get('minZoom'),
 			maxZoom: this.config.get('maxZoom'),
 			mapHeight: this.config.get('mapHeight'),
-			mapTiles: this.config.get('mapTiles'),
-			mapTilesDark: this.config.get('mapTilesDark'),
+			mapType: this.config.get('mapType'),
 		});
 	}
 
-	private showMapContextMenu(evt: MouseEvent): void {
+	private showMapContextMenu(e: any): void {
 		if (!this.map || !this.mapConfig) return;
 
-		const currentZoom = Math.round(this.map.getZoom() * 10) / 10; // Round to 1 decimal place
+		const currentZoom = Math.round(this.map.getZoom() * 10) / 10;
 
-		// Get coordinates from the location of the right-click event, not the map center
-		const clickPoint: [number, number] = [evt.offsetX, evt.offsetY];
-		const clickedCoords = this.map.unproject(clickPoint);
-		const currentLat = Math.round(clickedCoords.lat * 100000) / 100000;
-		const currentLng = Math.round(clickedCoords.lng * 100000) / 100000;
+		// Get coordinates from the click event
+		const clickLngLat = e.lnglat;
+		if (!clickLngLat) return;
 
-		const menu = Menu.forEvent(evt);
+		// Convert from GCJ-02 to WGS-84 for storage
+		const wgs84Coord = this.gcj02ToWgs84([clickLngLat.getLat(), clickLngLat.getLng()]);
+		const currentLat = Math.round(wgs84Coord[0] * 100000) / 100000;
+		const currentLng = Math.round(wgs84Coord[1] * 100000) / 100000;
+
+		// Get the original DOM event
+		const originalEvent = e.originEvent?.originalEvent || e.originEvent || e;
+
+		const menu = Menu.forEvent(originalEvent);
 		menu.addItem(item => item
 			.setTitle('New note')
 			.setSection('action')
@@ -622,18 +525,18 @@ export class MapView extends BasesView {
 				// Set the current center as the default coordinates
 				const coordListStr = `[${currentLat}, ${currentLng}]`;
 
-				// 1. Update the component's internal state immediately.
-				// This ensures that if a re-render is triggered, its logic will use the
-				// new coordinates and prevent the map from recentering on markers.
+				// 1. Update the component's internal state immediately
 				if (this.mapConfig) {
 					this.mapConfig.center = [currentLat, currentLng];
 				}
 
-				// 2. Set the config value, which will be saved.
+				// 2. Set the config value, which will be saved
 				this.config.set('center', coordListStr);
 
-				// 3. Immediately move the map for instant user feedback.
-				this.map?.setCenter([currentLng, currentLat]); // MapLibre uses [lng, lat]
+				// 3. Immediately move the map for instant user feedback
+				if (this.map) {
+					this.map.setCenter(clickLngLat);
+				}
 			})
 		);
 
@@ -645,6 +548,8 @@ export class MapView extends BasesView {
 				this.config.set('defaultZoom', currentZoom);
 			})
 		);
+
+		menu.showAtMouseEvent(originalEvent);
 	}
 
 	public setEphemeralState(state: unknown): void {
@@ -659,7 +564,8 @@ export class MapView extends BasesView {
 			const lat = state.center.lat;
 
 			if (typeof lng === 'number' && typeof lat === 'number') {
-				this.pendingMapState.center = { lng, lat };
+				// Convert from GCJ-02 to WGS-84 for storage
+				this.pendingMapState.center = this.gcj02ToWgs84([lat, lng]);
 			}
 		}
 		if (hasOwnProperty(state, 'zoom') && typeof state.zoom === 'number') {
@@ -672,9 +578,71 @@ export class MapView extends BasesView {
 
 		const center = this.map.getCenter();
 		return {
-			center: { lng: center.lng, lat: center.lat },
+			center: { lng: center.getLng(), lat: center.getLat() },
 			zoom: this.map.getZoom(),
 		};
+	}
+
+	/**
+	 * WGS-84 to GCJ-02 coordinate conversion (Mars Coordinate System)
+	 */
+	private wgs84ToGcj02([lat, lng]: [number, number]): [number, number] {
+		// China's approximate bounds
+		if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
+			return [lat, lng];
+		}
+
+		let dlat = this.transformLat(lng - 105.0, lat - 35.0);
+		let dlng = this.transformLng(lng - 105.0, lat - 35.0);
+		const radlat = lat / 180.0 * Math.PI;
+		let magic = Math.sin(radlat);
+		magic = 1 - 0.00669342162296594323 * magic * magic;
+		const sqrtmagic = Math.sqrt(magic);
+		dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
+		dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
+		const mglat = lat + dlat;
+		const mglng = lng + dlng;
+
+		return [mglat, mglng];
+	}
+
+	/**
+	 * GCJ-02 to WGS-84 coordinate conversion
+	 */
+	private gcj02ToWgs84([lat, lng]: [number, number]): [number, number] {
+		// China's approximate bounds
+		if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) {
+			return [lat, lng];
+		}
+
+		let dlat = this.transformLat(lng - 105.0, lat - 35.0);
+		let dlng = this.transformLng(lng - 105.0, lat - 35.0);
+		const radlat = lat / 180.0 * Math.PI;
+		let magic = Math.sin(radlat);
+		magic = 1 - 0.00669342162296594323 * magic * magic;
+		const sqrtmagic = Math.sqrt(magic);
+		dlat = (dlat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtmagic) * Math.PI);
+		dlng = (dlng * 180.0) / (6378245.0 / sqrtmagic * Math.cos(radlat) * Math.PI);
+		const mglat = lat - dlat;
+		const mglng = lng - dlng;
+
+		return [mglat, mglng];
+	}
+
+	private transformLat(lng: number, lat: number): number {
+		let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
+		ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
+		ret += (20.0 * Math.sin(lat * Math.PI) + 40.0 * Math.sin(lat / 3.0 * Math.PI)) * 2.0 / 3.0;
+		ret += (160.0 * Math.sin(lat / 12.0 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30.0)) * 2.0 / 3.0;
+		return ret;
+	}
+
+	private transformLng(lng: number, lat: number): number {
+		let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
+		ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
+		ret += (20.0 * Math.sin(lng * Math.PI) + 40.0 * Math.sin(lng / 3.0 * Math.PI)) * 2.0 / 3.0;
+		ret += (150.0 * Math.sin(lng / 12.0 * Math.PI) + 300.0 * Math.sin(lng / 30.0 * Math.PI)) * 2.0 / 3.0;
+		return ret;
 	}
 
 	static getViewOptions(): ViewOption[] {
@@ -692,7 +660,6 @@ export class MapView extends BasesView {
 				displayName: 'Display',
 				type: 'group',
 				items: [
-
 					{
 						displayName: 'Center coordinates',
 						type: 'formula',
@@ -756,18 +723,15 @@ export class MapView extends BasesView {
 				]
 			},
 			{
-				displayName: 'Background',
+				displayName: 'Map Type',
 				type: 'group',
 				items: [
 					{
-						displayName: 'Map tiles',
-						type: 'multitext',
-						key: 'mapTiles',
-					},
-					{
-						displayName: 'Map tiles in dark mode',
-						type: 'multitext',
-						key: 'mapTilesDark',
+						displayName: 'Default map type',
+						type: 'text',
+						key: 'mapType',
+						placeholder: 'standard, satellite, or hybrid',
+						default: 'standard',
 					},
 				]
 			},

@@ -1,21 +1,29 @@
-import { Plugin } from 'obsidian';
-import { MapView } from './map-view';
-import { MapSettings, DEFAULT_SETTINGS, MapSettingTab } from './settings';
+import { Plugin, Notice } from 'obsidian';
+import { AMapView, AMapViewType } from './amap-view';
+import { AMapSettings, DEFAULT_SETTINGS, AMapSettingTab } from './settings';
+import { clearAMapCache } from './amap-loader';
 
-export default class ObsidianMapsPlugin extends Plugin {
-	settings: MapSettings;
+export default class ObsidianAMapsPlugin extends Plugin {
+	settings: AMapSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		this.registerBasesView('map', {
+		this.registerBasesView(AMapViewType, {
 			name: 'Map',
 			icon: 'lucide-map',
-			factory: (controller, containerEl) => new MapView(controller, containerEl, this),
-			options: MapView.getViewOptions,
+			factory: (controller, containerEl) => new AMapView(controller, containerEl, this),
+			options: AMapView.getViewOptions,
 		});
 
-		this.addSettingTab(new MapSettingTab(this.app, this));
+		this.addSettingTab(new AMapSettingTab(this.app, this));
+
+		// Show notice if API key is not configured
+		if (!this.settings.apiKey || !this.settings.securityJsCode) {
+			this.app.workspace.onLayoutReady(() => {
+				new Notice('AMaps: Please configure API Key and Security Config in settings', 10000);
+			});
+		}
 	}
 
 	async loadSettings() {
@@ -24,8 +32,11 @@ export default class ObsidianMapsPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		// Clear AMap cache to force reload with new settings
+		clearAMapCache();
 	}
 
 	onunload() {
+		clearAMapCache();
 	}
 }

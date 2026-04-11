@@ -1,0 +1,45 @@
+Obsidian AMaps
+==============
+
+This project is a fork of the Obsidian Maps plugin by Obsidian.
+Original repository: https://github.com/obsidianmd/obsidian-maps
+
+Copyright (c) 2025 Obsidian
+Copyright (c) 2025 Easman (modifications)
+
+Modifications from Original
+---------------------------
+
+Version 1.0.0:
+  * Replaced MapLibre GL JS with AMap (Gaode Maps) JS API 2.0
+  * Added AMap API Key and Security Configuration support
+  * Optimized for users in China mainland with faster map loading
+  * Implemented WGS-84 to GCJ-02 coordinate conversion
+  * Replaced GeoJSON-based markers with AMap.Marker
+  * Replaced MapLibre Popup with AMap.InfoWindow
+  * Removed multi-tile provider support (AMap only)
+  * Removed RTL (Right-to-Left) text plugin
+  * Updated test data to use Chinese locations
+  * Added bilingual documentation (English and Chinese)
+
+Third-Party Dependencies
+------------------------
+
+This project uses the following third-party libraries:
+
+  * @amap/amap-jsapi-loader - AMap JavaScript API Loader
+    https://www.npmjs.com/package/@amap/amap-jsapi-loader
+
+  * obsidian - Obsidian API
+    https://github.com/obsidianmd/obsidian-api
+
+License
+-------
+
+This project is licensed under the MIT License.
+See LICENSE file for the full license text.
+
+The original Obsidian Maps plugin is also licensed under the MIT License.
+Copyright (c) 2025 Obsidian
+
+The MIT License applies to all modifications made by this project.

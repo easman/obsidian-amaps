@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate test markdown files with valid coordinates for Obsidian Maps plugin testing.
+Generate test markdown files with Chinese coordinates for Obsidian AMaps plugin testing.
 
 Usage:
     python generate_test_files.py [count]
@@ -14,122 +14,123 @@ import sys
 import random
 from pathlib import Path
 
-# Lists for generating random place names
-ADJECTIVES = [
-    "Ancient", "Beautiful", "Charming", "Historic", "Grand", "Royal", "Sacred",
-    "Old", "New", "Golden", "Silver", "Crystal", "Hidden", "Mystic", "Noble",
-    "Imperial", "Modern", "Contemporary", "Traditional", "Peaceful", "Busy",
-    "Central", "Northern", "Southern", "Eastern", "Western", "Coastal", "Mountain",
-    "River", "Lake", "Forest", "Urban", "Rural", "Metropolitan"
+# Chinese city coordinate ranges
+# Format: city_name, (lat_min, lat_max, lon_min, lon_max)
+CHINA_CITIES = [
+    {"name": "北京", "lat": (39.4, 40.4), "lon": (115.7, 117.4)},
+    {"name": "上海", "lat": (30.7, 31.9), "lon": (120.8, 122.2)},
+    {"name": "广州", "lat": (22.5, 23.5), "lon": (112.8, 114.0)},
+    {"name": "深圳", "lat": (22.4, 22.9), "lon": (113.7, 114.6)},
+    {"name": "成都", "lat": (30.1, 31.0), "lon": (103.5, 104.9)},
+    {"name": "杭州", "lat": (30.0, 30.6), "lon": (119.5, 120.6)},
+    {"name": "武汉", "lat": (30.3, 31.0), "lon": (113.7, 114.8)},
+    {"name": "西安", "lat": (33.8, 34.8), "lon": (108.5, 109.5)},
+    {"name": "重庆", "lat": (28.5, 30.5), "lon": (105.5, 107.5)},
+    {"name": "南京", "lat": (31.8, 32.5), "lon": (118.3, 119.1)},
+    {"name": "天津", "lat": (38.5, 39.5), "lon": (116.8, 117.8)},
+    {"name": "苏州", "lat": (31.2, 31.5), "lon": (120.5, 121.0)},
+    {"name": "郑州", "lat": (34.5, 35.0), "lon": (113.5, 114.0)},
+    {"name": "长沙", "lat": (28.0, 28.5), "lon": (112.8, 113.4)},
+    {"name": "沈阳", "lat": (41.5, 42.0), "lon": (123.2, 123.6)},
+    {"name": "青岛", "lat": (36.0, 36.5), "lon": (120.3, 120.7)},
+    {"name": "厦门", "lat": (24.4, 24.6), "lon": (118.0, 118.2)},
+    {"name": "昆明", "lat": (24.8, 25.2), "lon": (102.6, 102.9)},
+    {"name": "大连", "lat": (38.8, 39.2), "lon": (121.5, 121.8)},
+    {"name": "哈尔滨", "lat": (45.6, 46.0), "lon": (126.5, 126.8)},
 ]
 
-PLACE_TYPES = [
-    "Museum", "Gallery", "Park", "Garden", "Plaza", "Square", "Tower", "Castle",
-    "Cathedral", "Church", "Temple", "Monastery", "Palace", "Monument", "Memorial",
-    "Library", "Theater", "Opera House", "Concert Hall", "Market", "Bazaar",
-    "Restaurant", "Cafe", "Hotel", "Bridge", "Station", "Port", "Harbor",
-    "University", "School", "Hospital", "Fountain", "Statue", "Building",
-    "Center", "District", "Quarter", "Street", "Avenue", "Boulevard"
+# Chinese place types
+CHINA_PLACE_TYPES = [
+    "博物馆", "公园", "图书馆", "大学", "医院", "商场",
+    "餐厅", "咖啡馆", "地铁站", "景点", "酒店", "体育馆",
+    "剧院", "电影院", "寺庙", "古迹", "大厦", "广场"
 ]
 
-PLACE_NAMES = [
-    "St. James", "Victoria", "Alexander", "Elizabeth", "Charles", "William",
-    "Margaret", "George", "Henry", "Louis", "Napoleon", "Augustus", "Caesar",
-    "Cleopatra", "Athena", "Apollo", "Zeus", "Jupiter", "Neptune", "Venus",
-    "Liberty", "Freedom", "Unity", "Peace", "Hope", "Faith", "Grace",
-    "Washington", "Lincoln", "Jefferson", "Roosevelt", "Kennedy", "Churchill"
+# Chinese adjectives
+CHINA_ADJECTIVES = [
+    "古老", "现代", "繁华", "宁静", "著名", "热闹",
+    "美丽", "宏伟", "传统", "时尚", "中央", "滨江",
+    "风景优美", "历史悠久", "人文荟萃", "商业繁华"
 ]
 
-# Place types with their link format
-PLACE_LINK_TYPES = [
-    "Church", "Museum", "Restaurant", "Cafe", "Park", "Gallery", "Theater",
-    "Library", "University", "Hospital", "Hotel", "Market", "Monument",
-    "Castle", "Cathedral", "Temple", "Mosque", "Synagogue", "Shrine",
-    "Beach", "Mountain", "Lake", "River", "Bridge", "Tower", "Palace",
-    "Fort", "Memorial", "Station", "Airport", "Port", "Garden", "Zoo",
-    "Aquarium", "Stadium", "Arena", "Mall", "Shop", "Bar", "Club",
-    "Gym", "Spa", "Cinema", "School", "Cemetery", "Plaza", "Square"
+# Chinese place names
+CHINA_PLACE_NAMES = [
+    "天安门", "故宫", "长城", "颐和园", "天坛",
+    "外滩", "东方明珠", "豫园", "南京路",
+    "西湖", "灵隐寺", "千岛湖",
+    "兵马俑", "大雁塔", "钟楼",
+    "宽窄巷子", "锦里", "大熊猫基地",
+    "鼓浪屿", "南普陀寺",
+    "黄鹤楼", "东湖",
+    "解放碑", "洪崖洞",
+    "夫子庙", "中山陵",
+    "拙政园", "虎丘",
+    "少林寺", "嵩山",
 ]
 
-# Broader geographic regions for more spread out coordinates
-# Format: (lat_min, lat_max, lon_min, lon_max)
-WORLD_REGIONS = [
-    # Europe - broader coverage
-    {"name": "Western Europe", "lat": (42.0, 55.0), "lon": (-5.0, 10.0)},
-    {"name": "Central Europe", "lat": (45.0, 54.0), "lon": (10.0, 25.0)},
-    {"name": "Southern Europe", "lat": (36.0, 45.0), "lon": (-9.0, 20.0)},
-    {"name": "Northern Europe", "lat": (54.0, 70.0), "lon": (5.0, 30.0)},
-    {"name": "Eastern Europe", "lat": (45.0, 60.0), "lon": (20.0, 40.0)},
-    
-    # North America - broader coverage
-    {"name": "Northeast US", "lat": (38.0, 47.0), "lon": (-80.0, -66.0)},
-    {"name": "Southeast US", "lat": (25.0, 38.0), "lon": (-90.0, -75.0)},
-    {"name": "Midwest US", "lat": (36.0, 49.0), "lon": (-104.0, -80.0)},
-    {"name": "Southwest US", "lat": (31.0, 42.0), "lon": (-125.0, -103.0)},
-    {"name": "West Coast US", "lat": (32.0, 49.0), "lon": (-125.0, -116.0)},
-    {"name": "Canada East", "lat": (42.0, 60.0), "lon": (-95.0, -52.0)},
-    {"name": "Canada West", "lat": (48.0, 60.0), "lon": (-140.0, -95.0)},
-    {"name": "Mexico", "lat": (14.5, 32.5), "lon": (-117.0, -86.0)},
-    {"name": "Central America", "lat": (7.0, 18.0), "lon": (-92.0, -77.0)},
-    {"name": "Caribbean", "lat": (10.0, 27.0), "lon": (-85.0, -59.0)},
-    
-    # South America - broader coverage
-    {"name": "Brazil North", "lat": (-10.0, 5.0), "lon": (-75.0, -35.0)},
-    {"name": "Brazil South", "lat": (-34.0, -10.0), "lon": (-75.0, -35.0)},
-    {"name": "Argentina", "lat": (-55.0, -22.0), "lon": (-73.0, -53.0)},
-    {"name": "Andean Region", "lat": (-20.0, 12.0), "lon": (-81.0, -66.0)},
-    
-    # Asia - broader coverage
-    {"name": "East Asia", "lat": (20.0, 50.0), "lon": (100.0, 145.0)},
-    {"name": "Southeast Asia", "lat": (-10.0, 25.0), "lon": (95.0, 140.0)},
-    {"name": "South Asia", "lat": (5.0, 35.0), "lon": (60.0, 95.0)},
-    {"name": "Central Asia", "lat": (35.0, 55.0), "lon": (46.0, 87.0)},
-    {"name": "Middle East", "lat": (12.0, 42.0), "lon": (34.0, 63.0)},
-    {"name": "Japan", "lat": (30.0, 46.0), "lon": (129.0, 146.0)},
-    
-    # Africa - broader coverage
-    {"name": "North Africa", "lat": (15.0, 37.0), "lon": (-17.0, 51.0)},
-    {"name": "West Africa", "lat": (4.0, 20.0), "lon": (-17.0, 15.0)},
-    {"name": "East Africa", "lat": (-12.0, 15.0), "lon": (22.0, 51.0)},
-    {"name": "Southern Africa", "lat": (-35.0, -12.0), "lon": (11.0, 42.0)},
-    
-    # Oceania - broader coverage
-    {"name": "Australia East", "lat": (-44.0, -10.0), "lon": (140.0, 154.0)},
-    {"name": "Australia West", "lat": (-35.0, -13.0), "lon": (113.0, 130.0)},
-    {"name": "New Zealand", "lat": (-47.0, -34.0), "lon": (166.0, 179.0)},
-    {"name": "Pacific Islands", "lat": (-25.0, 15.0), "lon": (140.0, -140.0)},
+# Lucide icons suitable for places
+PLACE_ICONS = [
+    "map-pin", "landmark", "building", "home", "store",
+    "utensils", "coffee", "book-open", "trees", "mountain",
+    "castle", "church", "school", "hospital", "train",
+    "plane", "ship", "camera", "palette", "music"
+]
+
+# Colors suitable for markers
+PLACE_COLORS = [
+    "#c41e3a",  # Chinese Red
+    "#2e5c8a",  # Blue
+    "#228b22",  # Forest Green
+    "#ff8c00",  # Dark Orange
+    "#800080",  # Purple
+    "#d2691e",  # Chocolate
+    "#008080",  # Teal
+    "#dc143c",  # Crimson
+    "#4169e1",  # Royal Blue
+    "#32cd32",  # Lime Green
 ]
 
 
-def generate_random_place_name():
-    """Generate a random place name."""
-    pattern = random.choice([
-        lambda: f"{random.choice(ADJECTIVES)} {random.choice(PLACE_TYPES)}",
-        lambda: f"{random.choice(PLACE_NAMES)} {random.choice(PLACE_TYPES)}",
-        lambda: f"{random.choice(PLACE_NAMES)}'s {random.choice(PLACE_TYPES)}",
-        lambda: f"The {random.choice(ADJECTIVES)} {random.choice(PLACE_TYPES)}",
-        lambda: f"{random.choice(PLACE_TYPES)} of {random.choice(PLACE_NAMES)}",
-    ])
-    return pattern()
+def generate_random_place_name(city_name: str) -> str:
+    """Generate a random place name in Chinese."""
+    patterns = [
+        lambda: f"{city_name}{random.choice(CHINA_ADJECTIVES)}{random.choice(CHINA_PLACE_TYPES)}",
+        lambda: f"{random.choice(CHINA_PLACE_NAMES)}{random.choice(CHINA_PLACE_TYPES)}",
+        lambda: f"{random.choice(CHINA_ADJECTIVES)}{random.choice(CHINA_PLACE_NAMES)}",
+        lambda: f"{city_name}{random.choice(CHINA_PLACE_NAMES)}",
+    ]
+    return random.choice(patterns)()
 
 
-def generate_coordinates():
-    """Generate random coordinates within a geographic region."""
-    region = random.choice(WORLD_REGIONS)
-    
-    lat = random.uniform(region["lat"][0], region["lat"][1])
-    lon = random.uniform(region["lon"][0], region["lon"][1])
-    
-    # Format with high precision like the example
-    return f"{lat:.14f}", f"{lon:.7f}"
+def generate_coordinates(city: dict = None) -> tuple:
+    """Generate random coordinates within a Chinese city."""
+    if city is None:
+        city = random.choice(CHINA_CITIES)
+
+    lat = random.uniform(city["lat"][0], city["lat"][1])
+    lon = random.uniform(city["lon"][0], city["lon"][1])
+
+    # Format with appropriate precision
+    return f"{lat:.6f}", f"{lon:.6f}"
 
 
-def generate_place_type():
+def generate_place_type() -> str:
     """Generate a random place type in [[Type]] format."""
-    return f"[[{random.choice(PLACE_LINK_TYPES)}]]"
+    return f"[[{random.choice(CHINA_PLACE_TYPES)}]]"
 
 
-def create_markdown_file(directory, filename, coordinates, place_type):
+def generate_icon() -> str:
+    """Generate a random icon name."""
+    return random.choice(PLACE_ICONS)
+
+
+def generate_color() -> str:
+    """Generate a random color."""
+    return random.choice(PLACE_COLORS)
+
+
+def create_markdown_file(directory: Path, filename: str, coordinates: tuple,
+                         place_type: str, icon: str, color: str) -> None:
     """Create a markdown file with YAML frontmatter."""
     content = f"""---
 category: "[[Places]]"
@@ -137,53 +138,67 @@ type: "{place_type}"
 coordinates:
   - "{coordinates[0]}"
   - "{coordinates[1]}"
+icon: "{icon}"
+color: "{color}"
 ---
+
+# {filename.replace('.md', '')}
+
+这是一个测试地点，用于展示 AMaps 插件的功能。
 """
-    
+
     filepath = directory / filename
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
 
 
-def generate_test_files(count=100, output_dir="generated_places"):
+def generate_test_files(count=100, output_dir="generated_places") -> Path:
     """Generate test markdown files with coordinates."""
     # Create output directory
     script_dir = Path(__file__).parent
     output_path = script_dir / output_dir
     output_path.mkdir(exist_ok=True)
-    
+
     print(f"Generating {count} test files in {output_path}...")
-    
+
     # Keep track of generated names to avoid duplicates
     generated_names = set()
-    
+
     for i in range(count):
+        # Select a random city
+        city = random.choice(CHINA_CITIES)
+
         # Generate unique place name
         attempt = 0
+        place_name = ""
         while attempt < 100:  # Prevent infinite loop
-            place_name = generate_random_place_name()
+            place_name = generate_random_place_name(city["name"])
             if place_name not in generated_names:
                 generated_names.add(place_name)
                 break
             attempt += 1
         else:
             # If we can't find a unique name, append a number
-            place_name = f"{generate_random_place_name()} {i}"
-        
+            place_name = f"{generate_random_place_name(city['name'])} {i}"
+
         # Generate coordinates and type
-        coordinates = generate_coordinates()
+        coordinates = generate_coordinates(city)
         place_type = generate_place_type()
-        
-        # Create filename
+        icon = generate_icon()
+        color = generate_color()
+
+        # Create filename (sanitize for filesystem)
         filename = f"{place_name}.md"
-        
+        filename = "".join(c for c in filename if c.isalnum() or c in '._- ')
+        filename = filename.replace(' ', '_')
+
         # Create the file
-        create_markdown_file(output_path, filename, coordinates, place_type)
-        
+        create_markdown_file(output_path, filename, coordinates, place_type, icon, color)
+
         # Print progress for large batches
-        if (i + 1) % 1000 == 0:
+        if (i + 1) % 100 == 0:
             print(f"  Generated {i + 1} files...")
-    
+
     print(f"✓ Successfully generated {count} files in {output_path}/")
     return output_path
 
@@ -191,7 +206,7 @@ def generate_test_files(count=100, output_dir="generated_places"):
 def main():
     """Main entry point."""
     count = 100  # Default
-    
+
     if len(sys.argv) > 1:
         try:
             count = int(sys.argv[1])
@@ -201,10 +216,9 @@ def main():
         except ValueError:
             print(f"Error: Invalid count '{sys.argv[1]}'. Must be an integer.")
             sys.exit(1)
-    
+
     generate_test_files(count)
 
 
 if __name__ == "__main__":
     main()
-
