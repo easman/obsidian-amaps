@@ -169,7 +169,7 @@ export class AMapView extends BasesView {
 			// Add build info label
 			const buildLabel = document.createElement('div');
 			buildLabel.className = 'amaps-build-label';
-			buildLabel.textContent = 'AMaps v1.0.0 (Build: 20250411-001)';
+			buildLabel.textContent = 'AMaps v1.0.0 (Build: 20260411-150515)';
 			buildLabel.style.cssText = 'position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.5); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; z-index: 1000; pointer-events: none;';
 			this.mapEl.appendChild(buildLabel);
 

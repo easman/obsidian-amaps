@@ -24,7 +24,7 @@ export class AMapSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
+async display(): Promise<void> {
 		const { containerEl } = this;
 		containerEl.empty();
 
@@ -42,7 +42,7 @@ export class AMapSettingTab extends PluginSettingTab {
 		}
 
 		// Check if .env file exists but wasn't loaded
-		const envFileExists = hasEnvFile(this.plugin.app.vault);
+		const envFileExists = await hasEnvFile(this.plugin.app.vault);
 		if (envFileExists && !this.plugin.envConfigLoaded) {
 			const envNotice = containerEl.createDiv('amaps-env-notice');
 			envNotice.style.cssText = 'background: #fff3e0; border-left: 4px solid #ff9800; padding: 12px; margin-bottom: 20px; border-radius: 4px;';
