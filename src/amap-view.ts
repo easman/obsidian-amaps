@@ -292,9 +292,11 @@ export class AMapView extends BasesView {
 		this.mapEl.style.setProperty('overscroll-behavior', 'none', 'important');
 
 		this.mapEl.addEventListener('touchstart', (e) => {
+			// Only stop propagation so Obsidian workspace gestures don’t fire.
+			// Do NOT call preventDefault() here – it would block clicks on
+			// map controls (e.g. the map-type checkbox) on iOS.
 			e.stopPropagation();
-			e.preventDefault();
-		}, { passive: false });
+		}, { passive: true });
 		this.mapEl.addEventListener('touchmove', (e) => {
 			e.stopPropagation();
 			e.preventDefault();
