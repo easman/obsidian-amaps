@@ -55,6 +55,7 @@ export class AMapView extends BasesView {
 	private markerManager: AMapMarkerManager;
 	private apiError: string | null = null;
 
+
 	constructor(controller: QueryController, scrollEl: HTMLElement, plugin: ObsidianAMapsPlugin) {
 		super(controller);
 		this.scrollEl = scrollEl;
@@ -176,6 +177,12 @@ export class AMapView extends BasesView {
 			buildLabel.style.cssText = 'position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.5); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; z-index: 1000; pointer-events: none;';
 			this.mapEl.appendChild(buildLabel);
 
+			// Prevent the native context menu on iOS long-press so AMap can handle
+			// the touch gesture itself ( Obsidian workspace gestures won’t interfere ).
+			this.mapEl.addEventListener('contextmenu', (evt) => {
+				evt.preventDefault();
+			}, { capture: true });
+
 			// Add context menu to map
 			this.map.on('rightclick', (e: any) => {
 				this.showMapContextMenu(e);
@@ -217,6 +224,9 @@ export class AMapView extends BasesView {
 
 			// Hide tooltip on the map element
 			this.mapEl.querySelector('canvas')?.style.setProperty('--no-tooltip', 'true');
+
+			// Prevent Obsidian iOS swipe gestures from interfering with map panning.
+			this.setupGestureInterception();
 
 		} catch (error) {
 			console.error('Failed to initialize map:', error);
@@ -271,6 +281,24 @@ export class AMapView extends BasesView {
 		}
 		this.markerManager.setMap(null, null);
 		this.amapModule = null;
+	}
+
+	/**
+	 * Prevent Obsidian iOS swipe gestures from interfering with map panning.
+	 * Test version: CSS + mapEl touch stopPropagation only (no pointer capture).
+	 */
+	private setupGestureInterception(): void {
+		this.mapEl.style.setProperty('touch-action', 'none', 'important');
+		this.mapEl.style.setProperty('overscroll-behavior', 'none', 'important');
+
+		this.mapEl.addEventListener('touchstart', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+		}, { passive: false });
+		this.mapEl.addEventListener('touchmove', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+		}, { passive: false });
 	}
 
 	public onDataUpdated(): void {

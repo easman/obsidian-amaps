@@ -32,6 +32,14 @@ body {
 	overflow: hidden;
 	position: relative;
 	-webkit-tap-highlight-color: rgb(0, 0, 0, 0);
+	touch-action: none !important;
+	overscroll-behavior: none !important;
+}
+
+.bases-map * {
+	touch-action: none !important;
+	overscroll-behavior: none !important;
+}
 
 	&.is-loading {
 		display: flex;
