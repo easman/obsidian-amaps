@@ -191,23 +191,56 @@ body {
 	}
 }
 
-.amap-maptype {
-	.amap-maptype-list {
-		background-color: var(--background-primary);
-		border: 1px solid var(--background-modifier-border);
-		border-radius: var(--radius-m);
+.amaps-custom-maptype {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 1000;
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: 6px 8px;
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-normal);
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	user-select: none;
 
-		.amap-maptype-item {
-			color: var(--text-normal);
+	.amaps-maptype-group,
+	.amaps-checkbox-group {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
 
-			&:hover {
-				background-color: var(--background-modifier-hover);
-			}
+	.amaps-divider {
+		height: 1px;
+		background-color: var(--background-modifier-border);
+		margin: 2px 0;
+	}
 
-			&.amap-maptype-selected {
-				background-color: var(--interactive-accent);
-				color: var(--text-on-accent);
-			}
+	.amaps-radio,
+	.amaps-checkbox {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		cursor: pointer;
+		padding: 2px 4px;
+		border-radius: var(--radius-s);
+
+		&:hover {
+			background-color: var(--background-modifier-hover);
+		}
+
+		input {
+			margin: 0;
+			cursor: pointer;
+		}
+
+		span {
+			line-height: 1;
 		}
 	}
 }

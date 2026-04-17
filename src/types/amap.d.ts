@@ -229,15 +229,20 @@ declare namespace AMap {
 		offset?: Pixel;
 	}
 
-	class TileLayer {
+	class TileLayer implements Overlay {
 		constructor(opts?: TileLayerOptions);
 		getTiles(): any[];
 		reload(): void;
+		setMap(map: Map | null): void;
+		getMap(): Map | null;
+		hide(): void;
+		show(): void;
 	}
 
 	namespace TileLayer {
 		class Satellite extends TileLayer {}
 		class RoadNet extends TileLayer {}
+		class Traffic extends TileLayer {}
 	}
 
 	interface TileLayerOptions {
@@ -249,8 +254,8 @@ declare namespace AMap {
 	interface Overlay {
 		setMap(map: Map | null): void;
 		getMap(): Map | null;
-		hide(): void;
-		show(): void;
+		hide?(): void;
+		show?(): void;
 	}
 
 	namespace event {

@@ -55,6 +55,15 @@ export class AMapView extends BasesView {
 	private markerManager: AMapMarkerManager;
 	private apiError: string | null = null;
 
+	// Custom map type control state
+	private satelliteLayer: AMap.TileLayer.Satellite | null = null;
+	private roadNetLayer: AMap.TileLayer.RoadNet | null = null;
+	private trafficLayer: AMap.TileLayer.Traffic | null = null;
+	private customMapTypeEl: HTMLElement | null = null;
+	private currentBaseLayer: 'standard' | 'satellite' = 'standard';
+	private isRoadNetVisible = false;
+	private isTrafficVisible = false;
+
 
 	constructor(controller: QueryController, scrollEl: HTMLElement, plugin: ObsidianAMapsPlugin) {
 		super(controller);
@@ -143,8 +152,13 @@ export class AMapView extends BasesView {
 				}
 			}
 
-			// Determine layers based on map type
-			const layers = this.getMapLayers(this.mapConfig.mapType);
+			// Determine initial base layer and visibility from map type config
+			this.currentBaseLayer = this.mapConfig.mapType === 'satellite' || this.mapConfig.mapType === 'hybrid' ? 'satellite' : 'standard';
+			this.isRoadNetVisible = this.mapConfig.mapType === 'hybrid';
+			this.isTrafficVisible = false;
+
+			// Determine base layers
+			const layers = this.getMapLayers();
 
 			// Create AMap instance
 			this.map = new this.amapModule.Map(this.mapEl, {
@@ -163,12 +177,12 @@ export class AMapView extends BasesView {
 			this.map.addControl(new this.amapModule.ToolBar({
 				position: 'RB',
 			}));
-			this.map.addControl(new this.amapModule.MapType({
-				defaultType: this.getDefaultMapTypeIndex(this.mapConfig.mapType),
-			}));
 			this.map.addControl(new this.amapModule.Scale({
 				position: 'LB',
 			}));
+
+			// Add custom map type control
+			this.createMapTypeControl();
 
 			// Add build info label
 			const buildLabel = document.createElement('div');
@@ -235,33 +249,129 @@ export class AMapView extends BasesView {
 		}
 	}
 
-	private getMapLayers(mapType: MapType): AMap.TileLayer[] {
+	private getMapLayers(): AMap.TileLayer[] {
 		if (!this.amapModule) return [];
 
-		switch (mapType) {
-			case 'satellite':
-				return [new this.amapModule.TileLayer.Satellite()];
-			case 'hybrid':
-				return [
-					new this.amapModule.TileLayer.Satellite(),
-					new this.amapModule.TileLayer.RoadNet(),
-				];
-			case 'standard':
-			default:
-				return [];
+		const layers: AMap.TileLayer[] = [];
+		if (this.currentBaseLayer === 'satellite') {
+			this.satelliteLayer = new this.amapModule.TileLayer.Satellite();
+			layers.push(this.satelliteLayer);
 		}
+		if (this.isRoadNetVisible) {
+			this.roadNetLayer = new this.amapModule.TileLayer.RoadNet();
+			layers.push(this.roadNetLayer);
+		}
+		if (this.isTrafficVisible) {
+			this.trafficLayer = new this.amapModule.TileLayer.Traffic();
+			layers.push(this.trafficLayer);
+		}
+		return layers;
 	}
 
-	private getDefaultMapTypeIndex(mapType: MapType): number {
-		switch (mapType) {
-			case 'satellite':
-				return 1;
-			case 'hybrid':
-				return 1; // Satellite with road net overlay
-			case 'standard':
-			default:
-				return 0;
+	private createMapTypeControl(): void {
+		if (!this.map || !this.mapEl) return;
+
+		this.customMapTypeEl = document.createElement('div');
+		this.customMapTypeEl.className = 'amaps-custom-maptype';
+
+		// Base layer radios
+		const baseGroup = document.createElement('div');
+		baseGroup.className = 'amaps-maptype-group';
+		baseGroup.innerHTML = `
+			<label class="amaps-radio">
+				<input type="radio" name="amaps-base" value="standard" ${this.currentBaseLayer === 'standard' ? 'checked' : ''}>
+				<span>标准图层</span>
+			</label>
+			<label class="amaps-radio">
+				<input type="radio" name="amaps-base" value="satellite" ${this.currentBaseLayer === 'satellite' ? 'checked' : ''}>
+				<span>卫星图</span>
+			</label>
+		`;
+
+		// Divider
+		const divider = document.createElement('div');
+		divider.className = 'amaps-divider';
+
+		// Overlay checkboxes
+		const overlayGroup = document.createElement('div');
+		overlayGroup.className = 'amaps-checkbox-group';
+		overlayGroup.innerHTML = `
+			<label class="amaps-checkbox">
+				<input type="checkbox" value="road" ${this.isRoadNetVisible ? 'checked' : ''}>
+				<span>路网</span>
+			</label>
+			<label class="amaps-checkbox">
+				<input type="checkbox" value="traffic" ${this.isTrafficVisible ? 'checked' : ''}>
+				<span>路况</span>
+			</label>
+		`;
+
+		this.customMapTypeEl.appendChild(baseGroup);
+		this.customMapTypeEl.appendChild(divider);
+		this.customMapTypeEl.appendChild(overlayGroup);
+
+		// Event listeners
+		baseGroup.addEventListener('change', (e) => {
+			const target = e.target as HTMLInputElement;
+			if (target.name === 'amaps-base') {
+				this.setBaseLayer(target.value as 'standard' | 'satellite');
+			}
+		});
+
+		overlayGroup.addEventListener('change', (e) => {
+			const target = e.target as HTMLInputElement;
+			if (target.value === 'road') {
+				this.setRoadNetVisible(target.checked);
+			} else if (target.value === 'traffic') {
+				this.setTrafficVisible(target.checked);
+			}
+		});
+
+		this.mapEl.appendChild(this.customMapTypeEl);
+	}
+
+	private setBaseLayer(type: 'standard' | 'satellite'): void {
+		if (!this.map || !this.amapModule || type === this.currentBaseLayer) return;
+
+		if (type === 'satellite') {
+			if (!this.satelliteLayer) {
+				this.satelliteLayer = new this.amapModule.TileLayer.Satellite();
+			}
+			this.map.add(this.satelliteLayer);
+		} else {
+			if (this.satelliteLayer) {
+				this.map.remove(this.satelliteLayer);
+			}
 		}
+		this.currentBaseLayer = type;
+	}
+
+	private setRoadNetVisible(visible: boolean): void {
+		if (!this.map || !this.amapModule || visible === this.isRoadNetVisible) return;
+
+		if (visible) {
+			if (!this.roadNetLayer) {
+				this.roadNetLayer = new this.amapModule.TileLayer.RoadNet();
+			}
+			this.map.add(this.roadNetLayer);
+		} else if (this.roadNetLayer) {
+			this.map.remove(this.roadNetLayer);
+		}
+		this.isRoadNetVisible = visible;
+	}
+
+	private setTrafficVisible(visible: boolean): void {
+		if (!this.map || !this.amapModule || visible === this.isTrafficVisible) return;
+
+		if (visible) {
+			if (!this.trafficLayer) {
+				this.trafficLayer = new this.amapModule.TileLayer.Traffic();
+			}
+			this.map.add(this.trafficLayer);
+		} else if (this.trafficLayer) {
+			this.map.remove(this.trafficLayer);
+		}
+		this.isTrafficVisible = visible;
 	}
 
 	private showError(): void {
@@ -281,6 +391,13 @@ export class AMapView extends BasesView {
 		}
 		this.markerManager.setMap(null, null);
 		this.amapModule = null;
+		if (this.customMapTypeEl) {
+			this.customMapTypeEl.remove();
+			this.customMapTypeEl = null;
+		}
+		this.satelliteLayer = null;
+		this.roadNetLayer = null;
+		this.trafficLayer = null;
 	}
 
 	/**
@@ -381,6 +498,7 @@ export class AMapView extends BasesView {
 		const centerConfigChanged = oldConfig?.center !== newConfig.center;
 		const zoomConfigChanged = oldConfig?.defaultZoom !== newConfig.defaultZoom;
 		const heightChanged = oldConfig?.mapHeight !== newConfig.mapHeight;
+		const mapTypeChanged = oldConfig?.mapType !== newConfig.mapType;
 
 		// Note: AMap doesn't have setZooms method, zooms are set at initialization
 
@@ -403,6 +521,20 @@ export class AMapView extends BasesView {
 		// Update center on first load or when center config changed
 		if (!hasEphemeralState && (this.isFirstLoad || centerConfigChanged)) {
 			this.updateCenter();
+		}
+
+		// Update map type and overlays when changed
+		if (this.isFirstLoad || mapTypeChanged) {
+			const newBaseLayer = newConfig.mapType === 'satellite' || newConfig.mapType === 'hybrid' ? 'satellite' : 'standard';
+			const newRoadNetVisible = newConfig.mapType === 'hybrid';
+			this.setBaseLayer(newBaseLayer);
+			this.setRoadNetVisible(newRoadNetVisible);
+			if (this.customMapTypeEl) {
+				const baseRadio = this.customMapTypeEl.querySelector(`input[name="amaps-base"][value="${newBaseLayer}"]`) as HTMLInputElement | null;
+				if (baseRadio) baseRadio.checked = true;
+				const roadCheckbox = this.customMapTypeEl.querySelector('input[type="checkbox"][value="road"]') as HTMLInputElement | null;
+				if (roadCheckbox) roadCheckbox.checked = newRoadNetVisible;
+			}
 		}
 
 		// Update map height for embedded views if height changed
