@@ -156,8 +156,18 @@ export class AMapMarkerManager {
 			this.onOpenFile(markerData.entry.file.path, newLeaf);
 		});
 
-		marker.on('mouseover', () => {
+		marker.on('mouseover', (e: any) => {
 			this.onMarkerHover(markerData);
+			const event = e?.originEvent || e;
+			if (event) {
+				this.app.workspace.trigger('hover-link', {
+					event,
+					source: 'bases',
+					hoverParent: this.mapEl,
+					targetEl: this.mapEl,
+					linktext: markerData.entry.file.path,
+				});
+			}
 		});
 
 		marker.on('mouseout', () => {
@@ -167,19 +177,6 @@ export class AMapMarkerManager {
 		// Handle right-click context menu
 		marker.on('rightclick', (e: any) => {
 			this.onMarkerRightClick(markerData, e);
-		});
-
-		// Handle hover for link preview
-		marker.on('mouseover', (e: any) => {
-			const event = e?.originEvent || e;
-			if (!event) return;
-			this.app.workspace.trigger('hover-link', {
-				event,
-				source: 'bases',
-				hoverParent: this.mapEl,
-				targetEl: this.mapEl,
-				linktext: markerData.entry.file.path,
-			});
 		});
 
 		marker.setMap(this.map);
@@ -370,7 +367,7 @@ export class AMapMarkerManager {
 			.setTitle('Copy coordinates')
 			.setIcon('map-pin')
 			.onClick(() => {
-				const coordString = `${lat}, ${lng}`;
+				const coordString = `${lng}, ${lat}`;
 				void navigator.clipboard.writeText(coordString);
 			}));
 

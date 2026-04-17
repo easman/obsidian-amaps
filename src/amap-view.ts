@@ -172,7 +172,7 @@ export class AMapView extends BasesView {
 			// Add build info label
 			const buildLabel = document.createElement('div');
 			buildLabel.className = 'amaps-build-label';
-			buildLabel.textContent = 'AMaps v1.0.0 (Build: ' + BUILD_NUMBER + ')';
+			buildLabel.textContent = 'AMaps v' + this.plugin.manifest.version + ' (Build: ' + BUILD_NUMBER + ')';
 			buildLabel.style.cssText = 'position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.5); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; z-index: 1000; pointer-events: none;';
 			this.mapEl.appendChild(buildLabel);
 
@@ -511,7 +511,7 @@ export class AMapView extends BasesView {
 						const propertyKey = this.mapConfig.coordinatesProp.startsWith('note.')
 							? this.mapConfig.coordinatesProp.slice(5)
 							: this.mapConfig.coordinatesProp;
-						frontmatter[propertyKey] = [currentLat.toString(), currentLng.toString()];
+						frontmatter[propertyKey] = [currentLng.toString(), currentLat.toString()];
 					}
 				});
 			})
@@ -522,7 +522,7 @@ export class AMapView extends BasesView {
 			.setSection('action')
 			.setIcon('copy')
 			.onClick(() => {
-				const coordString = `${currentLat}, ${currentLng}`;
+				const coordString = `${currentLng}, ${currentLat}`;
 				void navigator.clipboard.writeText(coordString);
 			})
 		);
@@ -533,11 +533,11 @@ export class AMapView extends BasesView {
 			.setIcon('map-pin')
 			.onClick(() => {
 				// Set the current center as the default coordinates
-				const coordListStr = `[${currentLat}, ${currentLng}]`;
+				const coordListStr = `[${currentLng}, ${currentLat}]`;
 
 				// 1. Update the component's internal state immediately
 				if (this.mapConfig) {
-					this.mapConfig.center = [currentLat, currentLng];
+					this.mapConfig.center = [currentLng, currentLat];
 				}
 
 				// 2. Set the config value, which will be saved

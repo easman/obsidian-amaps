@@ -6,8 +6,6 @@ import { loadEnvFromVault } from './env-loader';
 
 // Build info - injected by esbuild during build
 declare const BUILD_NUMBER: string;
-const PLUGIN_VERSION = '1.0.0';
-
 export default class ObsidianAMapsPlugin extends Plugin {
 	settings: AMapSettings;
 	envConfigLoaded: boolean = false;
@@ -15,7 +13,7 @@ export default class ObsidianAMapsPlugin extends Plugin {
 	async onload() {
 		// Log build info prominently
 		console.log('%c[AMaps Plugin]', 'font-size: 20px; font-weight: bold; color: #c41e3a;');
-		console.log('%cVersion: ' + PLUGIN_VERSION + ' | Build: ' + BUILD_NUMBER, 'font-size: 14px; color: #2e5c8a;');
+		console.log('%cVersion: ' + this.manifest.version + ' | Build: ' + BUILD_NUMBER, 'font-size: 14px; color: #2e5c8a;');
 		console.log('%cIf you do not see this message, the plugin is not loaded!', 'font-size: 12px; color: #ff8c00; font-style: italic;');
 
 		await this.loadSettings();

@@ -56,11 +56,6 @@ The plugin will automatically read API credentials from `.env`. This keeps sensi
 
 > ⚠️ **Note**: `.env` files contain sensitive information. Do not commit them to Git!
 
-1. Register an account at [AMap Developer Console](https://lbs.amap.com/dev/key)
-2. Create a new Web platform application
-3. Get your Key and Security Config (安全密钥)
-4. Enter them in the plugin settings
-
 ## Usage
 
 1. Create a Base with notes containing location coordinates

@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release of Obsidian AMaps
 - AMap (Gaode Maps) JS API 2.0 integration
 - Support for AMap API Key and Security Configuration
-- Automatic WGS-84 to GCJ-02 coordinate conversion
 - Support for standard, satellite, and hybrid map types
 - Custom marker icons using Obsidian's Lucide icons
 - Custom marker colors support
