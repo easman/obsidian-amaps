@@ -181,7 +181,7 @@ declare namespace AMap {
 		backgroundColor?: string;
 		borderColor?: string;
 		borderWidth?: number;
-		padding?: string;
+		padding?: Array<(string | number)>;
 		fold?: boolean;
 	}
 

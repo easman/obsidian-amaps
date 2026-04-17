@@ -55,7 +55,7 @@ export class AMapMarkerManager {
 				zooms: [3, 20],
 				zIndex: 1000,
 				collision: false,
-				allowCollision: true,
+				allowCollision: false,
 			});
 			map.add(this.labelsLayer);
 		}
@@ -180,13 +180,12 @@ export class AMapMarkerManager {
 		// Text config for toggling visibility later
 		const textConfig: AMap.LabelMarkerTextOptions = {
 			content: labelTitle,
-			direction: 'right',
-			offset: [-2, -2],
+			direction: 'bottom',
+			offset: [0, -4],
 			style: {
 				fontSize: 12,
 				fillColor: '#ffffff',
 				backgroundColor: labelColor,
-				padding: '2, 4',
 			},
 		};
 
@@ -245,21 +244,26 @@ export class AMapMarkerManager {
 		const resolvedColor = this.resolveColor(color);
 		const resolvedIconColor = this.resolveColor('var(--bases-map-marker-icon-color)');
 
-		// LabelMarker requires icon image actual size to match configured size, so use 24x24 directly
-		const size = 24;
+		// Match LabelMarker icon size (30x30) and use DPR for crisp rendering on retina screens
+		const size = 30;
+		const dpr = window.devicePixelRatio || 1;
 		const canvas = document.createElement('canvas');
-		canvas.width = size;
-		canvas.height = size;
+		canvas.width = size * dpr;
+		canvas.height = size * dpr;
+		canvas.style.width = size + 'px';
+		canvas.style.height = size + 'px';
 		const ctx = canvas.getContext('2d');
 
 		if (!ctx) {
 			return '';
 		}
 
+		ctx.scale(dpr, dpr);
+
 		// Draw the circle background
 		const centerX = size / 2;
 		const centerY = size / 2;
-		const radius = 8;
+		const radius = 10;
 
 		ctx.fillStyle = resolvedColor;
 		ctx.beginPath();
@@ -306,7 +310,7 @@ export class AMapMarkerManager {
 			}
 		} else {
 			// Draw a dot
-			const dotRadius = 3;
+			const dotRadius = 4;
 			ctx.fillStyle = resolvedIconColor;
 			ctx.beginPath();
 			ctx.arc(centerX, centerY, dotRadius, 0, 2 * Math.PI);
