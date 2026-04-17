@@ -8,8 +8,9 @@ export class AMapMarkerManager {
 	private amapModule: typeof AMap | null = null;
 	private app: App;
 	private mapEl: HTMLElement;
-	private markers: AMap.Marker[] = [];
+	private labelMarkers: AMap.LabelMarker[] = [];
 	private markerData: MapMarker[] = [];
+	private labelsLayer: AMap.LabelsLayer | null = null;
 	private popupManager: AMapPopupManager;
 	private onOpenFile: (path: string, newLeaf: boolean) => void;
 	private getData: () => any;
@@ -37,6 +38,25 @@ export class AMapMarkerManager {
 	setMap(map: AMap.Map | null, amapModule: typeof AMap | null): void {
 		this.map = map;
 		this.amapModule = amapModule;
+
+		// Clean up old labels layer
+		if (this.labelsLayer) {
+			if (this.map) {
+				this.map.remove(this.labelsLayer);
+			}
+			this.labelsLayer = null;
+		}
+
+		// Create new labels layer if map is available
+		if (map && amapModule) {
+			this.labelsLayer = new amapModule.LabelsLayer({
+				zooms: [3, 20],
+				zIndex: 1000,
+				collision: false,
+				allowCollision: true,
+			});
+			map.add(this.labelsLayer);
+		}
 	}
 
 	getMarkers(): MapMarker[] {
@@ -44,43 +64,40 @@ export class AMapMarkerManager {
 	}
 
 	getBounds(): AMap.Bounds | null {
-		if (!this.map || this.markers.length === 0) return null;
+		if (!this.map || !this.amapModule || this.markerData.length === 0) return null;
 
 		let southWest: AMap.LngLat | null = null;
 		let northEast: AMap.LngLat | null = null;
 
-		for (const marker of this.markers) {
-			const pos = marker.getPosition();
-			if (!pos) continue;
+		for (const markerData of this.markerData) {
+			const [lng, lat] = markerData.coordinates;
 
 			if (!southWest) {
-				southWest = new this.amapModule!.LngLat(pos.getLng(), pos.getLat());
-				northEast = new this.amapModule!.LngLat(pos.getLng(), pos.getLat());
+				southWest = new this.amapModule.LngLat(lng, lat);
+				northEast = new this.amapModule.LngLat(lng, lat);
 			} else if (southWest && northEast) {
-				southWest = new this.amapModule!.LngLat(
-					Math.min(southWest.getLng(), pos.getLng()),
-					Math.min(southWest.getLat(), pos.getLat())
+				southWest = new this.amapModule.LngLat(
+					Math.min(southWest.getLng(), lng),
+					Math.min(southWest.getLat(), lat)
 				);
-				northEast = new this.amapModule!.LngLat(
-					Math.max(northEast.getLng(), pos.getLng()),
-					Math.max(northEast.getLat(), pos.getLat())
+				northEast = new this.amapModule.LngLat(
+					Math.max(northEast.getLng(), lng),
+					Math.max(northEast.getLat(), lat)
 				);
 			}
 		}
 
 		if (southWest && northEast) {
-			return new this.amapModule!.Bounds(southWest, northEast);
+			return new this.amapModule.Bounds(southWest, northEast);
 		}
 		return null;
 	}
 
 	clearMarkers(): void {
-		if (!this.map) return;
-
-		for (const marker of this.markers) {
-			marker.setMap(null);
+		if (this.labelsLayer) {
+			this.labelsLayer.clear();
 		}
-		this.markers = [];
+		this.labelMarkers = [];
 		this.markerData = [];
 	}
 
@@ -118,45 +135,67 @@ export class AMapMarkerManager {
 
 		// Create markers
 		for (const markerData of validMarkers) {
-			await this.createMarker(markerData);
+			await this.createLabelMarker(markerData);
 		}
 	}
 
-	private async createMarker(markerData: MapMarker): Promise<void> {
-		if (!this.map || !this.amapModule) return;
+	private async createLabelMarker(markerData: MapMarker): Promise<void> {
+		if (!this.map || !this.amapModule || !this.labelsLayer) {
+			return;
+		}
 
 		// Use GCJ-02 coordinates directly (format: [lng, lat])
 		const amapPosition: [number, number] = markerData.coordinates;
 
-		// Create icon
-		const icon = await this.createIcon(markerData.entry);
+		// Generate icon image using canvas (LabelMarker requires actual image size match)
+		const iconName = this.getCustomIcon(markerData.entry);
+		const color = this.getCustomColor(markerData.entry) || 'var(--bases-map-marker-background)';
+		const iconUrl = await this.generateIconImage(iconName, color);
 
 		// Get document title (without .md) and color for label
 		const title = markerData.entry.file.basename || markerData.entry.file.name.replace(/\.md$/, '');
-		const color = this.getCustomColor(markerData.entry) || '#2e5c8a';
+		const labelColor = this.getCustomColor(markerData.entry) || '#2e5c8a';
 
-		// Create marker with label
-		const marker = new this.amapModule.Marker({
+		// LabelMarker's canvas text measure doesn't handle emoji widths correctly,
+		// causing oversized background borders. Strip emoji for the label content.
+		const labelTitle = title.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{2B50}\u{FE0F}]/gu, '');
+
+		// Create label marker
+		const labelMarker = new this.amapModule.LabelMarker({
+			name: markerData.entry.file.name,
 			position: amapPosition,
-			icon: icon,
-			title: markerData.entry.file.name,
-			anchor: "center",
-			extData: { markerData },
-			label: {
-				content: `<span style="color:${color};font-size:12px;font-weight:700;text-shadow:0 0 2px #fff,0 0 4px #fff;white-space:nowrap;">${title}</span>`,
+			zIndex: 10,
+			icon: {
+				type: 'image',
+				image: iconUrl,
+				size: [24, 24],
+				anchor: 'center',
+			},
+			text: {
+				content: labelTitle,
 				direction: 'right',
-				offset: new this.amapModule.Pixel(1, 0)
-			}
+				offset: [-2, -2],
+				style: {
+					fontSize: 12,
+					fillColor: labelColor,
+					strokeColor: '#ffffff',
+					strokeWidth: 2,
+					backgroundColor: 'rgba(255, 255, 255, 0.9)',
+					borderColor: labelColor,
+					borderWidth: 1,
+					padding: '2, 4',
+				},
+			},
 		});
 
 		// Set up event handlers
-		marker.on('click', (e: any) => {
+		labelMarker.on('click', (e: any) => {
 			const originalEvent = e?.originEvent?.originalEvent || e?.originalEvent;
 			const newLeaf = originalEvent ? Boolean(Keymap.isModEvent(originalEvent)) : false;
 			this.onOpenFile(markerData.entry.file.path, newLeaf);
 		});
 
-		marker.on('mouseover', (e: any) => {
+		labelMarker.on('mouseover', (e: any) => {
 			this.onMarkerHover(markerData);
 			const event = e?.originEvent || e;
 			if (event) {
@@ -170,33 +209,17 @@ export class AMapMarkerManager {
 			}
 		});
 
-		marker.on('mouseout', () => {
+		labelMarker.on('mouseout', () => {
 			this.popupManager.hidePopup();
 		});
 
 		// Handle right-click context menu
-		marker.on('rightclick', (e: any) => {
+		labelMarker.on('rightclick', (e: any) => {
 			this.onMarkerRightClick(markerData, e);
 		});
 
-		marker.setMap(this.map);
-		this.markers.push(marker);
-	}
-
-	private async createIcon(entry: BasesEntry): Promise<AMap.Icon | string> {
-		if (!this.amapModule) return '';
-
-		const iconName = this.getCustomIcon(entry);
-		const color = this.getCustomColor(entry) || 'var(--bases-map-marker-background)';
-
-		// Generate icon image using canvas
-		const iconUrl = await this.generateIconImage(iconName, color);
-
-		return new this.amapModule.Icon({
-			size: new this.amapModule.Size(24, 24),
-			image: iconUrl,
-			imageSize: new this.amapModule.Size(24, 24)
-		});
+		this.labelsLayer.add(labelMarker);
+		this.labelMarkers.push(labelMarker);
 	}
 
 	private async generateIconImage(iconName: string | null, color: string): Promise<string> {
@@ -204,9 +227,8 @@ export class AMapMarkerManager {
 		const resolvedColor = this.resolveColor(color);
 		const resolvedIconColor = this.resolveColor('var(--bases-map-marker-icon-color)');
 
-		// Create a high-resolution canvas for crisp rendering on retina displays
-		const scale = 4;
-		const size = 24 * scale;
+		// LabelMarker requires icon image actual size to match configured size, so use 24x24 directly
+		const size = 24;
 		const canvas = document.createElement('canvas');
 		canvas.width = size;
 		canvas.height = size;
@@ -216,14 +238,10 @@ export class AMapMarkerManager {
 			return '';
 		}
 
-		// Enable high-quality rendering
-		ctx.imageSmoothingEnabled = true;
-		ctx.imageSmoothingQuality = 'high';
-
 		// Draw the circle background
 		const centerX = size / 2;
 		const centerY = size / 2;
-		const radius = 8 * scale;
+		const radius = 8;
 
 		ctx.fillStyle = resolvedColor;
 		ctx.beginPath();
@@ -232,7 +250,7 @@ export class AMapMarkerManager {
 
 		// Add subtle border
 		ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-		ctx.lineWidth = 1 * scale;
+		ctx.lineWidth = 1;
 		ctx.stroke();
 
 		// Draw the icon or dot
@@ -270,7 +288,7 @@ export class AMapMarkerManager {
 			}
 		} else {
 			// Draw a dot
-			const dotRadius = 3 * scale;
+			const dotRadius = 3;
 			ctx.fillStyle = resolvedIconColor;
 			ctx.beginPath();
 			ctx.arc(centerX, centerY, dotRadius, 0, 2 * Math.PI);

@@ -36,7 +36,7 @@ export async function loadAMap(config: AMapConfig): Promise<typeof AMap> {
 	amapModulePromise = AMapLoaderLoad({
 		key: config.apiKey,
 		version: '2.0',
-		plugins: ['AMap.ToolBar', 'AMap.MapType', 'AMap.Scale', 'AMap.InfoWindow'],
+		plugins: ['AMap.ToolBar', 'AMap.MapType', 'AMap.Scale', 'AMap.InfoWindow']
 	});
 
 	// Set security config before loading

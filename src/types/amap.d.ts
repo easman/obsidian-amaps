@@ -135,6 +135,72 @@ declare namespace AMap {
 		closeWhenClickMap?: boolean;
 	}
 
+	class LabelMarker {
+		constructor(opts: LabelMarkerOptions);
+		on(event: string, callback: (e?: any) => void): void;
+		off(event: string, callback: (e?: any) => void): void;
+		setOpacity(opacity: number): void;
+		setExtData(extData: any): void;
+		getExtData(): any;
+		setPosition(position: [number, number] | LngLat): void;
+		getPosition(): LngLat;
+	}
+
+	interface LabelMarkerOptions {
+		name?: string;
+		position: [number, number] | LngLat;
+		zIndex?: number;
+		rank?: number;
+		icon?: LabelMarkerIconOptions;
+		text?: LabelMarkerTextOptions;
+		extData?: any;
+	}
+
+	interface LabelMarkerIconOptions {
+		type?: 'image';
+		image?: string;
+		size?: [number, number] | Size;
+		anchor?: string;
+	}
+
+	interface LabelMarkerTextOptions {
+		content?: string;
+		direction?: string;
+		offset?: [number, number] | Pixel;
+		style?: LabelMarkerTextStyle;
+	}
+
+	interface LabelMarkerTextStyle {
+		fontSize?: number;
+		fontWeight?: string;
+		fillColor?: string;
+		strokeColor?: string;
+		strokeWidth?: number;
+		backgroundColor?: string;
+		borderColor?: string;
+		borderWidth?: number;
+		padding?: string;
+		fold?: boolean;
+	}
+
+	class LabelsLayer implements Overlay {
+		constructor(opts?: LabelsLayerOptions);
+		add(marker: LabelMarker | LabelMarker[]): void;
+		remove(marker: LabelMarker | LabelMarker[]): void;
+		clear(): void;
+		setMap(map: Map | null): void;
+		getMap(): Map | null;
+		hide(): void;
+		show(): void;
+	}
+
+	interface LabelsLayerOptions {
+		zooms?: [number, number];
+		zIndex?: number;
+		collision?: boolean;
+		allowCollision?: boolean;
+	}
+
 	class ToolBar {
 		constructor(opts?: ToolBarOptions);
 	}
