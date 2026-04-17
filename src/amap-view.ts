@@ -63,6 +63,7 @@ export class AMapView extends BasesView {
 	private currentBaseLayer: 'standard' | 'satellite' = 'standard';
 	private isRoadNetVisible = false;
 	private isTrafficVisible = false;
+	private isLabelsVisible = true;
 
 
 	constructor(controller: QueryController, scrollEl: HTMLElement, plugin: ObsidianAMapsPlugin) {
@@ -327,6 +328,27 @@ export class AMapView extends BasesView {
 			}
 		});
 
+		// Marker labels checkbox
+		const labelDivider = document.createElement('div');
+		labelDivider.className = 'amaps-divider';
+		const labelGroup = document.createElement('div');
+		labelGroup.className = 'amaps-checkbox-group';
+		labelGroup.innerHTML = `
+			<label class="amaps-checkbox">
+				<input type="checkbox" value="labels" ${this.isLabelsVisible ? 'checked' : ''}>
+				<span>显示标注</span>
+			</label>
+		`;
+		labelGroup.addEventListener('change', (e) => {
+			const target = e.target as HTMLInputElement;
+			if (target.value === 'labels') {
+				this.setLabelsVisible(target.checked);
+			}
+		});
+
+		this.customMapTypeEl.appendChild(labelDivider);
+		this.customMapTypeEl.appendChild(labelGroup);
+
 		this.mapEl.appendChild(this.customMapTypeEl);
 	}
 
@@ -372,6 +394,11 @@ export class AMapView extends BasesView {
 			this.map.remove(this.trafficLayer);
 		}
 		this.isTrafficVisible = visible;
+	}
+
+	private setLabelsVisible(visible: boolean): void {
+		this.isLabelsVisible = visible;
+		this.markerManager.setLabelsVisible(visible);
 	}
 
 	private showError(): void {

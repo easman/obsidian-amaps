@@ -9,6 +9,8 @@ export class AMapMarkerManager {
 	private app: App;
 	private mapEl: HTMLElement;
 	private labelMarkers: AMap.LabelMarker[] = [];
+	private labelTitles: string[] = [];
+	private labelTextStyles: AMap.LabelMarkerTextOptions[] = [];
 	private markerData: MapMarker[] = [];
 	private labelsLayer: AMap.LabelsLayer | null = null;
 	private popupManager: AMapPopupManager;
@@ -63,6 +65,19 @@ export class AMapMarkerManager {
 		return this.markerData;
 	}
 
+	setLabelsVisible(visible: boolean): void {
+		for (let i = 0; i < this.labelMarkers.length; i++) {
+			const marker = this.labelMarkers[i];
+			const style = this.labelTextStyles[i];
+			if (style) {
+				marker.setText({
+					...style,
+					content: visible ? this.labelTitles[i] : '',
+				});
+			}
+		}
+	}
+
 	getBounds(): AMap.Bounds | null {
 		if (!this.map || !this.amapModule || this.markerData.length === 0) return null;
 
@@ -98,6 +113,8 @@ export class AMapMarkerManager {
 			this.labelsLayer.clear();
 		}
 		this.labelMarkers = [];
+		this.labelTitles = [];
+		this.labelTextStyles = [];
 		this.markerData = [];
 	}
 
@@ -160,6 +177,19 @@ export class AMapMarkerManager {
 		// causing oversized background borders. Strip emoji for the label content.
 		const labelTitle = title.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{2B50}\u{FE0F}]/gu, '');
 
+		// Text config for toggling visibility later
+		const textConfig: AMap.LabelMarkerTextOptions = {
+			content: labelTitle,
+			direction: 'right',
+			offset: [-2, -2],
+			style: {
+				fontSize: 12,
+				fillColor: '#ffffff',
+				backgroundColor: labelColor,
+				padding: '2, 4',
+			},
+		};
+
 		// Create label marker
 		const labelMarker = new this.amapModule.LabelMarker({
 			name: markerData.entry.file.name,
@@ -168,24 +198,10 @@ export class AMapMarkerManager {
 			icon: {
 				type: 'image',
 				image: iconUrl,
-				size: [24, 24],
+				size: [30, 30],
 				anchor: 'center',
 			},
-			text: {
-				content: labelTitle,
-				direction: 'right',
-				offset: [-2, -2],
-				style: {
-					fontSize: 12,
-					fillColor: labelColor,
-					strokeColor: '#ffffff',
-					strokeWidth: 2,
-					backgroundColor: 'rgba(255, 255, 255, 0.9)',
-					borderColor: labelColor,
-					borderWidth: 1,
-					padding: '2, 4',
-				},
-			},
+			text: textConfig,
 		});
 
 		// Set up event handlers
@@ -220,6 +236,8 @@ export class AMapMarkerManager {
 
 		this.labelsLayer.add(labelMarker);
 		this.labelMarkers.push(labelMarker);
+		this.labelTitles.push(labelTitle);
+		this.labelTextStyles.push(textConfig);
 	}
 
 	private async generateIconImage(iconName: string | null, color: string): Promise<string> {

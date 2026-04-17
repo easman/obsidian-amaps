@@ -144,6 +144,8 @@ declare namespace AMap {
 		getExtData(): any;
 		setPosition(position: [number, number] | LngLat): void;
 		getPosition(): LngLat;
+		setText(text: LabelMarkerTextOptions): void;
+		setIcon(icon: LabelMarkerIconOptions): void;
 	}
 
 	interface LabelMarkerOptions {
