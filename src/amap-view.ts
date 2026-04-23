@@ -6,6 +6,7 @@ import {
 	BasesPropertyId,
 	debounce,
 	Menu,
+	Notice,
 	QueryController,
 	Value,
 	StringValue,
@@ -349,6 +350,29 @@ export class AMapView extends BasesView {
 		this.customMapTypeEl.appendChild(labelDivider);
 		this.customMapTypeEl.appendChild(labelGroup);
 
+		// Save current view as default button
+		const saveDivider = document.createElement('div');
+		saveDivider.className = 'amaps-divider';
+		const saveButton = document.createElement('button');
+		saveButton.className = 'amaps-save-view-btn';
+		saveButton.textContent = '设为默认视图';
+		saveButton.addEventListener('click', () => {
+			if (!this.map || !this.mapConfig) return;
+			const center = this.map.getCenter();
+			const zoom = this.map.getZoom();
+			const lng = Math.round(center.getLng() * 100000) / 100000;
+			const lat = Math.round(center.getLat() * 100000) / 100000;
+			const coordListStr = `[${lng}, ${lat}]`;
+			this.mapConfig.center = [lng, lat];
+			this.mapConfig.defaultZoom = zoom;
+			this.config.set('center', coordListStr);
+			this.config.set('defaultZoom', zoom);
+			new Notice('已保存当前视图为默认值');
+		});
+
+		this.customMapTypeEl.appendChild(saveDivider);
+		this.customMapTypeEl.appendChild(saveButton);
+
 		this.mapEl.appendChild(this.customMapTypeEl);
 	}
 
@@ -674,8 +698,6 @@ export class AMapView extends BasesView {
 	private showMapContextMenu(e: any): void {
 		if (!this.map || !this.mapConfig) return;
 
-		const currentZoom = Math.round(this.map.getZoom() * 10) / 10;
-
 		// Get coordinates from the click event
 		const clickLngLat = e.lnglat;
 		if (!clickLngLat) return;
@@ -716,37 +738,6 @@ export class AMapView extends BasesView {
 			})
 		);
 
-		menu.addItem(item => item
-			.setTitle('Set default center point')
-			.setSection('action')
-			.setIcon('map-pin')
-			.onClick(() => {
-				// Set the current center as the default coordinates
-				const coordListStr = `[${currentLng}, ${currentLat}]`;
-
-				// 1. Update the component's internal state immediately
-				if (this.mapConfig) {
-					this.mapConfig.center = [currentLng, currentLat];
-				}
-
-				// 2. Set the config value, which will be saved
-				this.config.set('center', coordListStr);
-
-				// 3. Immediately move the map for instant user feedback
-				if (this.map) {
-					this.map.setCenter(clickLngLat);
-				}
-			})
-		);
-
-		menu.addItem(item => item
-			.setTitle(`Set default zoom (${currentZoom})`)
-			.setSection('action')
-			.setIcon('crosshair')
-			.onClick(() => {
-				this.config.set('defaultZoom', currentZoom);
-			})
-		);
 
 		menu.showAtMouseEvent(originalEvent);
 	}
